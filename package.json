@@ -1,0 +1,48 @@
+{
+  "name": "tiket-sekolah",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:lan": "next start -H 0.0.0.0",
+    "lint": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:generate:neon": "prisma generate --schema prisma/schema.postgres.prisma",
+    "prisma:push:neon": "prisma db push --schema prisma/schema.postgres.prisma",
+    "build:neon": "prisma generate --schema prisma/schema.postgres.prisma && next build"
+  },
+  "keywords": [],
+  "author": "",
+  "private": true,
+  "license": "MIT",
+  "description": "MVP lokal untuk generate dan scan tiket photoshoot sekolah.",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@tailwindcss/postcss": "^4.2.4",
+    "bwip-js": "^4.10.1",
+    "clsx": "^2.1.1",
+    "html5-qrcode": "^2.3.8",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.14.0",
+    "nanoid": "^5.1.11",
+    "next": "^16.2.4",
+    "papaparse": "^5.5.3",
+    "pdf-lib": "^1.17.1",
+    "postcss": "^8.5.13",
+    "prisma": "^6.19.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3"
+  }
+}

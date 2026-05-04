@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TicketStatus {
+  UNUSED
+  CHECKED_IN
+  CANCELLED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  username  String   @unique
+  pinHash   String
+  role      UserRole
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Event {
+  id          String            @id @default(cuid())
+  name        String
+  schoolName  String
+  shootDate   DateTime?
+  codePrefix  String
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  tickets     Ticket[]
+  batches     GenerationBatch[]
+}
+
+model TicketTemplate {
+  id               String              @id @default(cuid())
+  name             String
+  originalFileName String
+  mimeType         String
+  filePath         String
+  width            Int
+  height           Int
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  placements       TemplatePlacement[]
+  tickets          Ticket[]
+  batches          GenerationBatch[]
+}
+
+model TemplatePlacement {
+  id            String         @id @default(cuid())
+  templateId    String
+  barcodeType   String
+  xPercent      Float
+  yPercent      Float
+  widthPercent  Float
+  heightPercent Float
+  rotation      Float          @default(0)
+  background    String         @default("white")
+  foreground    String         @default("black")
+  showText      Boolean        @default(false)
+  showStudentName Boolean      @default(true)
+  studentNameBackground String @default("white")
+  studentNameOffsetPercent Float @default(1.5)
+  studentNameFontPercent Float @default(3)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  template      TicketTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model Ticket {
+  id                 String         @id @default(cuid())
+  eventId            String
+  templateId         String
+  studentName        String
+  className          String
+  studentId          String?
+  packageName        String?
+  parentName         String?
+  phone              String?
+  notes              String?
+  ticketCode         String         @unique
+  barcodeType        String
+  status             TicketStatus   @default(UNUSED)
+  generatedImagePath String?
+  batchId            String?
+  checkInAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  event              Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template           TicketTemplate @relation(fields: [templateId], references: [id])
+  batch              GenerationBatch? @relation(fields: [batchId], references: [id])
+
+  @@index([eventId])
+  @@index([templateId])
+  @@index([batchId])
+}
+
+model GenerationBatch {
+  id           String         @id @default(cuid())
+  eventId      String
+  templateId   String
+  barcodeType  String
+  totalTickets Int
+  zipPath      String?
+  pdfPath      String?
+  manifestPath String?
+  createdAt    DateTime       @default(now())
+  event        Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  template     TicketTemplate @relation(fields: [templateId], references: [id])
+  tickets      Ticket[]
+
+  @@index([eventId])
+  @@index([templateId])
+}

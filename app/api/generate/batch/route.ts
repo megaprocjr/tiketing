@@ -1,0 +1,199 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { NextResponse } from "next/server";
+import JSZip from "jszip";
+import { PDFDocument } from "pdf-lib";
+import { db } from "@/lib/db";
+import { batchFolderName, generatedRoot, sanitizeFilePart, toPublicPath } from "@/lib/files";
+import { composeTicketImage } from "@/lib/image-compose";
+import { formatTicketCode } from "@/lib/ticket-code";
+import { generateBatchSchema } from "@/lib/validations";
+
+function csvCell(value: string | null | undefined) {
+  const text = value ?? "";
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function studentKey(row: { student_name: string; class_name: string; student_id?: string }) {
+  const id = row.student_id?.trim().toLowerCase();
+  const name = row.student_name.trim().toLowerCase();
+  const className = row.class_name.trim().toLowerCase();
+  return id ? `id:${id}|class:${className}` : `name:${name}|class:${className}`;
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const parsed = generateBatchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Data generate tidak valid." }, { status: 400 });
+  }
+
+  const event = await db.event.findUnique({ where: { id: parsed.data.eventId } });
+  const template = await db.ticketTemplate.findUnique({
+    where: { id: parsed.data.templateId },
+    include: { placements: { orderBy: { updatedAt: "desc" }, take: 1 } },
+  });
+  const placement = template?.placements[0];
+  if (!event) return NextResponse.json({ error: "Event tidak ditemukan." }, { status: 404 });
+  if (!template || !placement) return NextResponse.json({ error: "Desain atau posisi barcode belum siap." }, { status: 404 });
+
+  const incomingKeys = new Map<string, string>();
+  const duplicateRows = new Set<string>();
+  const rowsUniqueInFile: (typeof parsed.data.rows)[number][] = [];
+  for (const row of parsed.data.rows) {
+    const key = studentKey(row);
+    const label = `${row.student_name} (${row.class_name}${row.student_id ? `, ID ${row.student_id}` : ""})`;
+    if (incomingKeys.has(key)) {
+      duplicateRows.add(label);
+    } else {
+      rowsUniqueInFile.push(row);
+    }
+    incomingKeys.set(key, label);
+  }
+  if (duplicateRows.size > 0 && parsed.data.duplicateMode !== "skip") {
+    return NextResponse.json(
+      { error: `File data berisi siswa dobel: ${Array.from(duplicateRows).slice(0, 5).join(", ")}.` },
+      { status: 400 },
+    );
+  }
+
+  const existingTickets = await db.ticket.findMany({
+    where: { eventId: event.id },
+    select: { id: true, ticketCode: true, studentName: true, className: true, studentId: true, status: true },
+  });
+  const existingByKey = new Map(
+    existingTickets.map((ticket) => [
+      ticket.studentId?.trim()
+        ? `id:${ticket.studentId.trim().toLowerCase()}|class:${ticket.className.trim().toLowerCase()}`
+        : `name:${ticket.studentName.trim().toLowerCase()}|class:${ticket.className.trim().toLowerCase()}`,
+      ticket,
+    ]),
+  );
+  const existingMatches = rowsUniqueInFile
+    .map((row) => ({ row, ticket: existingByKey.get(studentKey(row)) }))
+    .filter((item): item is { row: (typeof parsed.data.rows)[number]; ticket: (typeof existingTickets)[number] } =>
+      Boolean(item.ticket),
+    );
+  if (existingMatches.length > 0 && parsed.data.duplicateMode !== "skip") {
+    const sample = existingMatches
+      .slice(0, 6)
+      .map(({ row }) => `${row.student_name} (${row.class_name}${row.student_id ? `, ID ${row.student_id}` : ""})`)
+      .join(", ");
+    return NextResponse.json(
+      {
+        error: `Tiket belum dibuat karena ${existingMatches.length} siswa sudah punya tiket di event ini: ${sample}. Hapus tiket lama atau pakai event baru jika ingin membuat ulang.`,
+        duplicates: existingMatches.map(({ row, ticket }) => ({ row, ticket })),
+      },
+      { status: 409 },
+    );
+  }
+
+  const existingKeys = new Set(existingMatches.map(({ row }) => studentKey(row)));
+  const rowsToGenerate =
+    parsed.data.duplicateMode === "skip" ? rowsUniqueInFile.filter((row) => !existingKeys.has(studentKey(row))) : rowsUniqueInFile;
+  const skippedRows =
+    parsed.data.duplicateMode === "skip"
+      ? parsed.data.rows.length - rowsToGenerate.length
+      : 0;
+
+  if (rowsToGenerate.length === 0) {
+    return NextResponse.json(
+      { error: "Semua data sudah pernah dibuat. Tidak ada tiket baru yang perlu dibuat." },
+      { status: 409 },
+    );
+  }
+
+  const folder = path.join(generatedRoot, event.id, batchFolderName());
+  await mkdir(folder, { recursive: true });
+  const startCount = await db.ticket.count({ where: { eventId: event.id } });
+
+  const batch = await db.generationBatch.create({
+    data: {
+      eventId: event.id,
+      templateId: template.id,
+      barcodeType: parsed.data.barcodeType,
+      totalTickets: rowsToGenerate.length,
+    },
+  });
+
+  const zip = new JSZip();
+  const pdf = await PDFDocument.create();
+  const manifestRows = [
+    ["ticket_code", "student_name", "class_name", "student_id", "package_name", "parent_name", "phone", "notes", "image_path"].join(","),
+  ];
+  const createdTickets = [];
+
+  for (const [index, row] of rowsToGenerate.entries()) {
+    const ticketCode = formatTicketCode(event.codePrefix, startCount + index + 1);
+    const fileName = `${sanitizeFilePart(row.class_name)}-${sanitizeFilePart(row.student_name)}-${ticketCode}.png`;
+    const outputPath = path.join(folder, fileName);
+
+    await composeTicketImage({
+      templatePath: template.filePath,
+      outputPath,
+      ticketCode,
+      studentName: row.student_name,
+      placement,
+      barcodeType: parsed.data.barcodeType,
+    });
+
+    const imagePath = toPublicPath(outputPath);
+    const ticket = await db.ticket.create({
+      data: {
+        eventId: event.id,
+        templateId: template.id,
+        studentName: row.student_name,
+        className: row.class_name,
+        studentId: row.student_id || null,
+        packageName: row.package_name || null,
+        parentName: row.parent_name || null,
+        phone: row.phone || null,
+        notes: row.notes || null,
+        ticketCode,
+        barcodeType: parsed.data.barcodeType,
+        generatedImagePath: imagePath,
+        batchId: batch.id,
+      },
+    });
+    createdTickets.push(ticket);
+
+    const pngBytes = await readFile(outputPath);
+    zip.file(fileName, pngBytes);
+    const embedded = await pdf.embedPng(pngBytes);
+    const page = pdf.addPage([embedded.width, embedded.height]);
+    page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
+    manifestRows.push(
+      [
+        ticketCode,
+        row.student_name,
+        row.class_name,
+        row.student_id,
+        row.package_name,
+        row.parent_name,
+        row.phone,
+        row.notes,
+        imagePath,
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+
+  const manifestPath = path.join(folder, "manifest.csv");
+  const zipPath = path.join(folder, "tickets.zip");
+  const pdfPath = path.join(folder, "tickets.pdf");
+  await writeFile(manifestPath, manifestRows.join("\n"));
+  await writeFile(zipPath, await zip.generateAsync({ type: "nodebuffer" }));
+  await writeFile(pdfPath, await pdf.save());
+
+  const updatedBatch = await db.generationBatch.update({
+    where: { id: batch.id },
+    data: {
+      manifestPath: toPublicPath(manifestPath),
+      zipPath: toPublicPath(zipPath),
+      pdfPath: toPublicPath(pdfPath),
+    },
+  });
+
+  return NextResponse.json({ batch: updatedBatch, tickets: createdTickets, skippedRows });
+}
