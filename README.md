@@ -134,3 +134,4 @@ samples/students.csv   CSV contoh
 - Tambahkan template text fields untuk menempel nama siswa/kelas ke desain.
 - Tambahkan audit log check-in dan backup database.
 - Jalankan behind HTTPS lokal/edge device untuk scanner HP yang lebih nyaman.
+# tiketing
