@@ -13,9 +13,9 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const rolePresets = [
-    { label: "Pemilik", username: "superadmin", pin: "123456", tone: "bg-blue-600 text-white shadow-blue-600/25" },
+    { label: "Director", username: "superadmin", pin: "123456", tone: "bg-blue-600 text-white shadow-blue-600/25" },
     { label: "Admin", username: "admin", pin: "222222", tone: "bg-white/15 text-white ring-1 ring-white/20" },
-    { label: "Scan", username: "operator", pin: "333333", tone: "bg-white/15 text-white ring-1 ring-white/20" },
+    { label: "Gate", username: "operator", pin: "333333", tone: "bg-white/15 text-white ring-1 ring-white/20" },
   ];
 
   async function submit(event: React.FormEvent) {
@@ -60,26 +60,26 @@ function LoginForm() {
               </span>
               <div>
                 <p className="text-sm font-bold">School Photo Ticket Studio</p>
-                <p className="text-xs text-blue-100">Kelola tiket foto sekolah</p>
+                <p className="text-xs text-blue-100">Event photo ticketing</p>
               </div>
             </div>
 
             <div className="max-w-2xl pb-10">
               <p className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black uppercase text-blue-100 backdrop-blur">
                 <ShieldCheck size={15} />
-                Data siswa tetap lokal
+                Private event console
               </p>
               <h1 className="mt-5 max-w-xl text-5xl font-bold leading-tight text-white xl:text-6xl">
-                Studio tiket photoshoot yang siap dipakai di hari event.
+                Ticketing studio untuk hari foto yang lebih tenang.
               </h1>
               <p className="mt-5 max-w-lg text-base leading-7 text-slate-200">
-                Buat tiket dari data siswa, pasang barcode di desain tiket, scan saat pengambilan, lalu rekap siapa yang sudah hadir.
+                Siapkan undangan foto, validasi barcode, dan pantau pengambilan dalam satu alur yang rapi.
               </p>
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
                 {[
-                  ["Buat tiket", QrCode],
-                  ["Scan", ScanLine],
-                  ["Rekap", CheckCircle2],
+                  ["Prepare", QrCode],
+                  ["Validate", ScanLine],
+                  ["Monitor", CheckCircle2],
                 ].map(([label, Icon]) => (
                   <div key={String(label)} className="rounded-xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
                     <Icon size={20} />
@@ -90,7 +90,7 @@ function LoginForm() {
             </div>
 
             <p className="max-w-md text-xs leading-5 text-slate-300">
-              Dirancang untuk operator sekolah dan vendor foto: cepat di laptop, ramah HP, dan mudah dibackup sebelum event dimulai.
+              Dibuat untuk tim foto sekolah yang butuh proses cepat, jelas, dan siap dipakai di lokasi.
             </p>
           </div>
         </section>
@@ -107,12 +107,12 @@ function LoginForm() {
                 </span>
                 <div>
                   <p className="text-sm font-black">School Photo Ticket Studio</p>
-                  <p className="text-xs text-blue-100">Kelola tiket foto sekolah</p>
+                  <p className="text-xs text-blue-100">Event photo ticketing</p>
                 </div>
               </div>
-              <h1 className="mt-6 text-3xl font-black leading-tight">Masuk ke studio tiket foto.</h1>
+              <h1 className="mt-6 text-3xl font-black leading-tight">Masuk ke ruang kendali event.</h1>
               <p className="mt-3 text-sm leading-6 text-blue-50">
-                Buat tiket, scan pengambilan, dan pantau daftar siswa dari satu tempat.
+                Kelola akses foto, validasi kode, dan pantau progres pembagian secara real-time.
               </p>
               <div className="mt-5 grid grid-cols-3 gap-2">
                 {rolePresets.map((role) => (
@@ -134,10 +134,10 @@ function LoginForm() {
 
             <form onSubmit={submit} className="rounded-[1.7rem] border border-white/80 bg-white/95 p-4 shadow-2xl shadow-slate-300/70 backdrop-blur sm:p-5">
               <div className="mb-5">
-                <p className="inline-flex rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase text-blue-700">Akses pengguna</p>
-                <h2 className="mt-3 text-2xl font-black text-slate-950">Masuk Studio</h2>
+                <p className="inline-flex rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase text-blue-700">Secure access</p>
+                <h2 className="mt-3 text-2xl font-black text-slate-950">Buka Console</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Pakai akun sesuai tugas saat event.
+                  Pilih peran kerja, lalu lanjutkan ke dashboard operasional.
                 </p>
               </div>
               <label className="block text-sm font-medium text-slate-700">
@@ -172,7 +172,7 @@ function LoginForm() {
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3.5 font-black text-white shadow-xl shadow-blue-600/25 hover:bg-blue-700 disabled:opacity-60"
               >
                 <ShieldCheck size={18} />
-                {loading ? "Masuk..." : "Masuk ke Studio"}
+                {loading ? "Membuka akses..." : "Masuk ke Console"}
               </button>
               <div className="mt-4 grid grid-cols-3 gap-2 text-[11px] leading-4 text-slate-600 min-[390px]:text-xs">
                 {rolePresets.map((role) => (
@@ -196,7 +196,7 @@ function LoginForm() {
             </form>
 
             <div className="mt-4 rounded-2xl border border-white/80 bg-white/80 p-4 text-xs leading-5 text-slate-500 shadow-lg shadow-slate-200/60 backdrop-blur">
-              Ganti PIN default di menu Pengaturan sebelum dipakai untuk event sungguhan.
+              Untuk event resmi, perbarui PIN tim dari menu Pengaturan sebelum operasional dimulai.
             </div>
           </div>
         </section>
