@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
-import { AlertTriangle, CheckCircle2, FileText, Sparkles, UploadCloud, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, FileText, QrCode, ShieldCheck, Sparkles, UploadCloud, Wand2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { BarcodeTypeSelector } from "@/components/BarcodeTypeSelector";
 import { BatchResultCard } from "@/components/BatchResultCard";
@@ -104,6 +104,14 @@ export default function GeneratePage() {
   }, [existingTickets, rows]);
 
   const hasDuplicates = duplicateInCsv.length > 0 || duplicateExisting.length > 0;
+  const selectedEvent = events.find((event) => event.id === eventId);
+  const selectedTemplate = templates.find((template) => template.id === templateId);
+  const readySteps = [
+    { label: "Event", done: Boolean(eventId), value: selectedEvent?.name ?? "Belum dipilih" },
+    { label: "Desain", done: Boolean(templateId), value: selectedTemplate?.name ?? "Belum dipilih" },
+    { label: "Data siswa", done: rows.length > 0 && errors.length === 0, value: rows.length ? `${rows.length} siswa` : "Menunggu CSV" },
+    { label: "Keamanan", done: !hasDuplicates || skipDuplicates, value: hasDuplicates ? (skipDuplicates ? "Dobel dilewati" : "Perlu dicek") : "Aman" },
+  ];
 
   const canGenerate = useMemo(
     () => eventId && templateId && rows.length > 0 && errors.length === 0 && !loading && (!hasDuplicates || skipDuplicates),
@@ -151,52 +159,81 @@ export default function GeneratePage() {
 
   return (
     <AppShell>
-      <section className="mb-4 rounded-2xl border border-white/80 bg-white/85 p-4 shadow-xl shadow-slate-200/70 backdrop-blur md:mb-6 md:p-6">
-        <p className="text-sm font-black uppercase tracking-wide text-emerald-700">Buat tiket banyak</p>
-        <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <section className="relative mb-4 overflow-hidden rounded-[1.35rem] border border-white/80 bg-slate-950 p-4 text-white shadow-2xl shadow-slate-300/70 md:mb-6 md:p-6">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.38),transparent_24rem),radial-gradient(circle_at_86%_10%,rgba(37,99,235,0.36),transparent_28rem),linear-gradient(135deg,#020617_0%,#0f172a_55%,#064e3b_100%)]" />
+        <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:42px_42px]" />
+        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-950 md:text-3xl">Buat Tiket dari Data Siswa</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Pilih event dan desain, masukkan data siswa, lalu unduh tiket siap cetak dan siap dibagikan.
+            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-emerald-100 ring-1 ring-white/15">
+              <Sparkles size={14} />
+              Ticket production
+            </p>
+            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight tracking-tight md:text-5xl">
+              Produksi tiket siap cetak dalam satu alur.
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-200 md:text-base">
+              Pilih event, pasangkan desain, validasi data siswa, lalu hasilkan tiket HD lengkap dengan file unduhan.
             </p>
           </div>
-          <div className="w-fit rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 md:px-4 md:py-3 md:text-sm">{rows.length} siswa siap dicek</div>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur">
+            <div className="rounded-xl bg-white/10 p-3">
+              <p className="text-xs text-emerald-100">Data masuk</p>
+              <p className="mt-1 text-2xl font-black">{rows.length}</p>
+            </div>
+            <div className="rounded-xl bg-white/10 p-3">
+              <p className="text-xs text-emerald-100">Status</p>
+              <p className="mt-1 text-sm font-black">{errors.length ? "Perlu koreksi" : hasDuplicates && !skipDuplicates ? "Cek dobel" : "Siap"}</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="grid gap-4 md:gap-5 lg:grid-cols-[390px_minmax(0,1fr)]">
-        <section className="space-y-4 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-xl shadow-slate-200/70 backdrop-blur md:p-5">
-          <div className="flex items-start gap-3">
-            <span className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
-              <UploadCloud size={21} />
-            </span>
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-[410px_minmax(0,1fr)]">
+        <section className="space-y-4 rounded-[1.35rem] border border-white/80 bg-white/95 p-4 shadow-2xl shadow-slate-200/70 backdrop-blur md:p-5">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-xl font-black text-slate-950">Langkah Buat Tiket</h2>
-              <p className="mt-1 text-sm text-slate-500">Ikuti urutan ini agar tiket tidak tertukar.</p>
+              <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Setup produksi</p>
+              <h2 className="mt-1 text-xl font-black text-slate-950">Siapkan tiket</h2>
+              <p className="mt-1 text-sm text-slate-500">Empat langkah pendek sebelum file dibuat.</p>
             </div>
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+              <UploadCloud size={20} />
+            </span>
           </div>
-          <label className="block text-sm font-bold text-slate-700">
-            1. Pilih event
-            <select value={eventId} onChange={(event) => setEventId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+          <label className="block rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm font-bold text-slate-700">
+            <span className="flex items-center justify-between">
+              <span>Event foto</span>
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-slate-500">01</span>
+            </span>
+            <select value={eventId} onChange={(event) => setEventId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
               {events.map((event) => (
                 <option key={event.id} value={event.id}>{event.name} - {event.schoolName}</option>
               ))}
             </select>
           </label>
-          <label className="block text-sm font-bold text-slate-700">
-            2. Pilih desain tiket
-            <select value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+          <label className="block rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-sm font-bold text-slate-700">
+            <span className="flex items-center justify-between">
+              <span>Desain tiket</span>
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-slate-500">02</span>
+            </span>
+            <select value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
             </select>
           </label>
-          <div>
-            <p className="mb-2 text-sm font-bold text-slate-700">3. Pilih jenis kode scan</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-700">
+              <span>Jenis kode scan</span>
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-slate-500">03</span>
+            </div>
             <BarcodeTypeSelector value={barcodeType} onChange={setBarcodeType} />
           </div>
-          <div>
-            <p className="mb-2 text-sm font-bold text-slate-700">4. Masukkan data siswa</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-700">
+              <span>Data siswa</span>
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-slate-500">04</span>
+            </div>
             <FileUploader label="Pilih file data siswa" accept=".csv,text/csv" onChange={(file) => void parseFile(file)} />
             <a href="/samples/students.csv" download className="mt-3 inline-flex items-center gap-2 text-sm font-black text-blue-700">
               <FileText size={15} />
@@ -220,18 +257,51 @@ export default function GeneratePage() {
           <button
             disabled={!canGenerate}
             onClick={generate}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-black text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 font-black text-white shadow-xl shadow-slate-900/20 hover:bg-slate-800 disabled:opacity-45"
           >
             <Wand2 size={17} />
             {loading ? "Membuat tiket..." : "Buat dan Unduh Tiket"}
           </button>
-          <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-            Sistem akan menolak data siswa yang sudah punya tiket di event yang sama agar tidak dobel.
+          <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
+            Data yang sudah punya tiket akan ditahan agar nomor tiket tidak dobel.
           </p>
           {message && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
         </section>
 
         <section className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="rounded-[1.35rem] border border-white/80 bg-white/90 p-4 shadow-xl shadow-slate-200/70 backdrop-blur">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-slate-500">Production review</p>
+                  <h2 className="mt-1 text-xl font-black text-slate-950">Ringkasan sebelum export</h2>
+                </div>
+                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+                  <QrCode size={19} />
+                </span>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {readySteps.map((step) => (
+                  <div key={step.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-black uppercase text-slate-500">{step.label}</p>
+                      <span className={`h-2.5 w-2.5 rounded-full ${step.done ? "bg-emerald-500" : "bg-slate-300"}`} />
+                    </div>
+                    <p className="mt-2 truncate text-sm font-black text-slate-950">{step.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-[1.35rem] border border-emerald-100 bg-emerald-50 p-4 shadow-xl shadow-emerald-100/60">
+              <div className="flex items-center gap-2 text-emerald-800">
+                <ShieldCheck size={18} />
+                <p className="font-black">Siap untuk event</p>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-emerald-900">
+                QR Code paling stabil untuk kamera HP. Barcode garis cocok kalau desain tiket butuh kode memanjang.
+              </p>
+            </div>
+          </div>
           {batch && <BatchResultCard batch={batch} tickets={batch.tickets ?? []} skippedRows={batch.skippedRows ?? 0} />}
           {hasDuplicates && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-lg shadow-amber-100/70">
@@ -281,9 +351,17 @@ export default function GeneratePage() {
           )}
           <CsvPreviewTable rows={rows} errors={errors} />
           {!rows.length && !errors.length && (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-10 text-center text-sm text-slate-500 shadow-lg shadow-slate-200/60">
-              <Sparkles className="mx-auto mb-3 text-emerald-600" size={24} />
-              Pilih file data siswa untuk melihat daftar sebelum tiket dibuat.
+            <div className="relative overflow-hidden rounded-[1.35rem] border border-dashed border-slate-300 bg-white/80 p-10 text-center text-sm text-slate-500 shadow-lg shadow-slate-200/60">
+              <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(15,23,42,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.06)_1px,transparent_1px)] [background-size:32px_32px]" />
+              <div className="relative mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 shadow-sm">
+                <Sparkles size={24} />
+              </div>
+              <p className="relative mt-4 font-black text-slate-950">Menunggu data siswa</p>
+              <p className="relative mx-auto mt-2 max-w-md leading-6">Upload file CSV untuk membuka preview, pengecekan dobel, dan tombol export tiket.</p>
+              <div className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white">
+                Mulai dari panel kiri
+                <ChevronRight size={14} />
+              </div>
             </div>
           )}
         </section>

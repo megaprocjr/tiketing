@@ -22,10 +22,10 @@ export function BarcodeTypeSelector({ value, onChange }: { value: BarcodeType; o
             type="button"
             onClick={() => onChange(type.value)}
             className={cn(
-              "focus-ring min-h-[104px] rounded-xl border p-2.5 text-left transition md:min-h-[132px] md:p-4",
+              "focus-ring min-h-[104px] rounded-2xl border p-2.5 text-left transition md:min-h-[126px] md:p-3",
               active
-                ? "border-blue-600 bg-blue-50 text-blue-950 shadow-lg shadow-blue-100"
-                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/40",
+                ? "border-blue-600 bg-white text-blue-950 shadow-lg shadow-blue-100"
+                : "border-slate-200 bg-white/70 text-slate-700 hover:border-blue-200 hover:bg-white",
             )}
           >
             <div className="flex flex-col gap-1 font-black leading-tight md:flex-row md:items-center md:gap-2">

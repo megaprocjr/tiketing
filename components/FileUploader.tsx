@@ -12,9 +12,9 @@ export function FileUploader({
   onChange: (file: File | null) => void;
 }) {
   return (
-    <label className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-200 bg-blue-50/40 p-6 text-center transition hover:border-blue-400 hover:bg-blue-50">
-      <span className="grid h-12 w-12 place-items-center rounded-xl bg-white text-blue-700 shadow-sm transition group-hover:-translate-y-0.5">
-        <Upload size={24} />
+    <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-blue-200 bg-white p-5 text-center shadow-sm transition hover:border-blue-400 hover:bg-blue-50/40">
+      <span className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 transition group-hover:-translate-y-0.5">
+        <Upload size={22} />
       </span>
       <span className="mt-3 text-sm font-black text-slate-950">{label}</span>
       <span className="mt-1 text-xs font-medium text-slate-500">Klik untuk pilih file dari perangkat</span>
