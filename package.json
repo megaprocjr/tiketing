@@ -20,6 +20,7 @@
   "description": "MVP lokal untuk generate dan scan tiket photoshoot sekolah.",
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@supabase/supabase-js": "^2.105.3",
     "@tailwindcss/postcss": "^4.2.4",
     "@vercel/blob": "^2.3.3",
     "bwip-js": "^4.10.1",

@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import { put } from "@vercel/blob";
 
 export const appRoot = process.cwd();
@@ -40,6 +41,38 @@ export function isBlobStorageEnabled() {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
+export function isSupabaseStorageEnabled() {
+  return Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function supabaseStorage() {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "ticket-files";
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Konfigurasi Supabase Storage belum lengkap.");
+  }
+  return {
+    bucket,
+    client: createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }),
+  };
+}
+
+async function putSupabaseFile(filePath: string, buffer: Buffer, contentType: string) {
+  const { bucket, client } = supabaseStorage();
+  const { error } = await client.storage.from(bucket).upload(filePath, buffer, {
+    contentType,
+    upsert: true,
+  });
+  if (error) {
+    throw new Error(`Upload Supabase gagal: ${error.message}`);
+  }
+  const { data } = client.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
 export async function readStoredFile(filePath: string) {
   if (isRemoteUrl(filePath)) {
     const response = await fetch(filePath);
@@ -71,6 +104,9 @@ export async function saveBufferSafe(directory: string, fileName: string, buffer
 
 export async function saveTemplateFile(fileName: string, buffer: Buffer, contentType: string) {
   const safeName = sanitizeFilePart(fileName);
+  if (isSupabaseStorageEnabled()) {
+    return putSupabaseFile(`templates/${Date.now()}-${safeName}`, buffer, contentType);
+  }
   if (isBlobStorageEnabled()) {
     const blob = await put(`templates/${Date.now()}-${safeName}`, buffer, {
       access: "public",
@@ -88,6 +124,9 @@ export async function saveGeneratedFile(relativePath: string, buffer: Buffer, co
     .map((part) => sanitizeFilePart(part))
     .filter(Boolean)
     .join("/");
+  if (isSupabaseStorageEnabled()) {
+    return putSupabaseFile(`generated/${safePath}`, buffer, contentType);
+  }
   if (isBlobStorageEnabled()) {
     const blob = await put(`generated/${safePath}`, buffer, {
       access: "public",

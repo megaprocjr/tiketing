@@ -27,18 +27,29 @@ Operator Scan: operator / 333333
 
 Sebelum dipakai sungguhan, login sebagai Super Admin lalu ganti PIN user di menu Pengaturan.
 
-## Mode Online Dengan Vercel, Neon, dan Blob
+## Mode Online Dengan Vercel, Neon, dan Storage
 
-Untuk online di Vercel, database Neon memakai PostgreSQL dan file tiket memakai Vercel Blob. Mode lokal tetap memakai SQLite + folder `public/`, sedangkan mode online memakai schema khusus di `prisma/schema.postgres.prisma`.
+Untuk online di Vercel, database Neon memakai PostgreSQL dan file tiket bisa memakai Vercel Blob atau Supabase Storage. Mode lokal tetap memakai SQLite + folder `public/`, sedangkan mode online memakai schema khusus di `prisma/schema.postgres.prisma`.
 
 1. Buat project database di Neon.
-2. Buat Blob Store di Vercel.
-3. Salin connection string Neon dan token Blob ke Environment Variables Vercel:
+2. Buat storage: Vercel Blob atau Supabase Storage.
+3. Salin connection string Neon dan env storage ke Environment Variables Vercel:
 
 ```bash
 DATABASE_URL="postgresql://USER:PASSWORD@HOST/dbname?sslmode=require"
 BLOB_READ_WRITE_TOKEN="vercel_blob_rw_xxxxxxxxxxxxxxxxx"
 ```
+
+Jika memilih Supabase Storage, pakai env berikut sebagai pengganti `BLOB_READ_WRITE_TOKEN`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://xxxxx.supabase.co"
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable_xxxxx"
+SUPABASE_SERVICE_ROLE_KEY="xxxxx"
+SUPABASE_STORAGE_BUCKET="ticket-files"
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` hanya untuk server/Vercel Environment Variables, jangan ditulis di source code atau dibagikan.
 
 4. Push struktur tabel ke Neon dari laptop:
 
@@ -52,7 +63,7 @@ npm run prisma:push:neon
 npm run build:neon
 ```
 
-Catatan penting: saat `BLOB_READ_WRITE_TOKEN` tersedia, upload template, preview, PNG tiket, PDF, ZIP, dan manifest CSV otomatis disimpan ke Vercel Blob. Tanpa token itu, aplikasi tetap menyimpan file lokal untuk development.
+Catatan penting: jika env Supabase Storage tersedia, file akan disimpan ke Supabase Storage. Jika tidak, aplikasi mencoba Vercel Blob. Tanpa env storage online, aplikasi tetap menyimpan file lokal untuk development.
 
 ## Fitur Yang Sudah Jadi
 
