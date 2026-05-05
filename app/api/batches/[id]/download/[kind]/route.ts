@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { publicPathToAbsolute } from "@/lib/files";
+import { isRemoteUrl, publicPathToAbsolute, readStoredFile } from "@/lib/files";
 
 const contentTypes = {
   zip: "application/zip",
@@ -26,9 +25,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "File export belum tersedia." }, { status: 404 });
   }
 
-  const absolute = publicPathToAbsolute(filePath);
-  const file = await readFile(absolute);
-  const fileName = path.basename(absolute);
+  const file = await readStoredFile(filePath);
+  const fileName = isRemoteUrl(filePath) ? path.basename(new URL(filePath).pathname) : path.basename(publicPathToAbsolute(filePath));
 
   return new NextResponse(file, {
     headers: {

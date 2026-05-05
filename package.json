@@ -21,6 +21,7 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@tailwindcss/postcss": "^4.2.4",
+    "@vercel/blob": "^2.3.3",
     "bwip-js": "^4.10.1",
     "clsx": "^2.1.1",
     "html5-qrcode": "^2.3.8",

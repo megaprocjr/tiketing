@@ -27,31 +27,32 @@ Operator Scan: operator / 333333
 
 Sebelum dipakai sungguhan, login sebagai Super Admin lalu ganti PIN user di menu Pengaturan.
 
-## Mode Online Dengan Neon
+## Mode Online Dengan Vercel, Neon, dan Blob
 
-Untuk online, database Neon memakai PostgreSQL. Mode lokal tetap memakai SQLite, sedangkan mode online memakai schema khusus di `prisma/schema.postgres.prisma`.
+Untuk online di Vercel, database Neon memakai PostgreSQL dan file tiket memakai Vercel Blob. Mode lokal tetap memakai SQLite + folder `public/`, sedangkan mode online memakai schema khusus di `prisma/schema.postgres.prisma`.
 
 1. Buat project database di Neon.
-2. Salin connection string Neon ke `.env` saat deploy:
+2. Buat Blob Store di Vercel.
+3. Salin connection string Neon dan token Blob ke Environment Variables Vercel:
 
 ```bash
 DATABASE_URL="postgresql://USER:PASSWORD@HOST/dbname?sslmode=require"
+BLOB_READ_WRITE_TOKEN="vercel_blob_rw_xxxxxxxxxxxxxxxxx"
 ```
 
-3. Push struktur tabel ke Neon:
+4. Push struktur tabel ke Neon dari laptop:
 
 ```bash
 npm run prisma:push:neon
 ```
 
-4. Build aplikasi untuk Neon:
+5. Deploy ke Vercel dari GitHub. File `vercel.json` sudah mengatur build command:
 
 ```bash
 npm run build:neon
-npm run start
 ```
 
-Catatan penting: file template dan hasil tiket tetap disimpan di storage server. Kalau deploy ke VPS, pastikan folder `public/uploads` dan `public/generated` ikut dibackup. Untuk platform serverless, pindahkan storage file ke object storage sebelum dipakai produksi.
+Catatan penting: saat `BLOB_READ_WRITE_TOKEN` tersedia, upload template, preview, PNG tiket, PDF, ZIP, dan manifest CSV otomatis disimpan ke Vercel Blob. Tanpa token itu, aplikasi tetap menyimpan file lokal untuk development.
 
 ## Fitur Yang Sudah Jadi
 

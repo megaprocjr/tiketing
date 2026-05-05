@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import path from "node:path";
 import { db } from "@/lib/db";
 import { composeTicketImage } from "@/lib/image-compose";
-import { previewDir, sanitizeFilePart, toPublicPath } from "@/lib/files";
+import { saveGeneratedFile, sanitizeFilePart } from "@/lib/files";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -15,14 +14,14 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "Desain atau posisi barcode belum tersedia." }, { status: 404 });
   }
 
-  const output = path.join(previewDir, `${sanitizeFilePart(template.name)}-${Date.now()}-preview.png`);
-  await composeTicketImage({
+  const fileName = `previews/${sanitizeFilePart(template.name)}-${Date.now()}-preview.png`;
+  const pngBuffer = await composeTicketImage({
     templatePath: template.filePath,
-    outputPath: output,
     ticketCode: "SCH-2026-000001-A8K2",
     studentName: "Budi Santoso",
     placement,
   });
+  const imagePath = await saveGeneratedFile(fileName, pngBuffer, "image/png");
 
-  return NextResponse.json({ imagePath: toPublicPath(output) });
+  return NextResponse.json({ imagePath });
 }

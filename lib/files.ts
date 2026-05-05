@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { put } from "@vercel/blob";
 
 export const appRoot = process.cwd();
 export const publicRoot = path.join(appRoot, "public");
@@ -31,6 +32,25 @@ export function publicPathToAbsolute(filePath: string) {
   return absolute;
 }
 
+export function isRemoteUrl(filePath: string) {
+  return /^https?:\/\//i.test(filePath);
+}
+
+export function isBlobStorageEnabled() {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
+
+export async function readStoredFile(filePath: string) {
+  if (isRemoteUrl(filePath)) {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error("File online tidak bisa dibaca.");
+    }
+    return Buffer.from(await response.arrayBuffer());
+  }
+  return Buffer.from(await readFile(publicPathToAbsolute(filePath)));
+}
+
 export async function ensureLocalDirs() {
   await mkdir(templateUploadDir, { recursive: true });
   await mkdir(previewDir, { recursive: true });
@@ -47,6 +67,38 @@ export async function saveBufferSafe(directory: string, fileName: string, buffer
   await mkdir(targetDir, { recursive: true });
   await writeFile(target, buffer);
   return target;
+}
+
+export async function saveTemplateFile(fileName: string, buffer: Buffer, contentType: string) {
+  const safeName = sanitizeFilePart(fileName);
+  if (isBlobStorageEnabled()) {
+    const blob = await put(`templates/${Date.now()}-${safeName}`, buffer, {
+      access: "public",
+      contentType,
+    });
+    return blob.url;
+  }
+  const target = await saveBufferSafe(templateUploadDir, safeName, buffer);
+  return toPublicPath(target);
+}
+
+export async function saveGeneratedFile(relativePath: string, buffer: Buffer, contentType: string) {
+  const safePath = relativePath
+    .split("/")
+    .map((part) => sanitizeFilePart(part))
+    .filter(Boolean)
+    .join("/");
+  if (isBlobStorageEnabled()) {
+    const blob = await put(`generated/${safePath}`, buffer, {
+      access: "public",
+      contentType,
+    });
+    return blob.url;
+  }
+  const target = path.join(generatedRoot, safePath);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, buffer);
+  return toPublicPath(target);
 }
 
 export function batchFolderName() {

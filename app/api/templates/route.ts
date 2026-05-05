@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { db } from "@/lib/db";
-import { ensureLocalDirs, sanitizeFilePart, templateUploadDir, toPublicPath } from "@/lib/files";
-import path from "node:path";
-import { writeFile } from "node:fs/promises";
+import { ensureLocalDirs, sanitizeFilePart, saveTemplateFile } from "@/lib/files";
 
 const allowedTypes = new Set(["image/png", "image/jpeg"]);
 const maxSize = 12 * 1024 * 1024;
@@ -44,15 +42,14 @@ export async function POST(request: Request) {
 
   const extension = file.type === "image/png" ? ".png" : ".jpg";
   const fileName = `${Date.now()}-${sanitizeFilePart(file.name.replace(/\.[^.]+$/, ""))}${extension}`;
-  const absolutePath = path.join(templateUploadDir, fileName);
-  await writeFile(absolutePath, buffer);
+  const filePath = await saveTemplateFile(fileName, buffer, file.type);
 
   const template = await db.ticketTemplate.create({
     data: {
       name: name || file.name.replace(/\.[^.]+$/, ""),
       originalFileName: file.name,
       mimeType: file.type,
-      filePath: toPublicPath(absolutePath),
+      filePath,
       width: metadata.width,
       height: metadata.height,
       placements: {

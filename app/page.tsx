@@ -5,6 +5,8 @@ import { StatCard } from "@/components/StatCard";
 import { db } from "@/lib/db";
 import { ensureSampleEvent } from "@/lib/seed";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   await ensureSampleEvent();
   const [events, templates, tickets, checkedIn, batches, latestEvent] = await Promise.all([

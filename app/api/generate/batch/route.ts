@@ -1,13 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 import { db } from "@/lib/db";
-import { batchFolderName, generatedRoot, sanitizeFilePart, toPublicPath } from "@/lib/files";
+import { batchFolderName, sanitizeFilePart, saveGeneratedFile } from "@/lib/files";
 import { composeTicketImage } from "@/lib/image-compose";
 import { formatTicketCode } from "@/lib/ticket-code";
 import { generateBatchSchema } from "@/lib/validations";
+
+export const maxDuration = 60;
 
 function csvCell(value: string | null | undefined) {
   const text = value ?? "";
@@ -103,8 +103,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const folder = path.join(generatedRoot, event.id, batchFolderName());
-  await mkdir(folder, { recursive: true });
+  const folder = `${event.id}/${batchFolderName()}`;
   const startCount = await db.ticket.count({ where: { eventId: event.id } });
 
   const batch = await db.generationBatch.create({
@@ -126,18 +125,16 @@ export async function POST(request: Request) {
   for (const [index, row] of rowsToGenerate.entries()) {
     const ticketCode = formatTicketCode(event.codePrefix, startCount + index + 1);
     const fileName = `${sanitizeFilePart(row.class_name)}-${sanitizeFilePart(row.student_name)}-${ticketCode}.png`;
-    const outputPath = path.join(folder, fileName);
 
-    await composeTicketImage({
+    const pngBytes = await composeTicketImage({
       templatePath: template.filePath,
-      outputPath,
       ticketCode,
       studentName: row.student_name,
       placement,
       barcodeType: parsed.data.barcodeType,
     });
 
-    const imagePath = toPublicPath(outputPath);
+    const imagePath = await saveGeneratedFile(`${folder}/${fileName}`, pngBytes, "image/png");
     const ticket = await db.ticket.create({
       data: {
         eventId: event.id,
@@ -157,7 +154,6 @@ export async function POST(request: Request) {
     });
     createdTickets.push(ticket);
 
-    const pngBytes = await readFile(outputPath);
     zip.file(fileName, pngBytes);
     const embedded = await pdf.embedPng(pngBytes);
     const page = pdf.addPage([embedded.width, embedded.height]);
@@ -179,19 +175,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const manifestPath = path.join(folder, "manifest.csv");
-  const zipPath = path.join(folder, "tickets.zip");
-  const pdfPath = path.join(folder, "tickets.pdf");
-  await writeFile(manifestPath, manifestRows.join("\n"));
-  await writeFile(zipPath, await zip.generateAsync({ type: "nodebuffer" }));
-  await writeFile(pdfPath, await pdf.save());
+  const manifestPath = await saveGeneratedFile(`${folder}/manifest.csv`, Buffer.from(manifestRows.join("\n")), "text/csv; charset=utf-8");
+  const zipPath = await saveGeneratedFile(`${folder}/tickets.zip`, await zip.generateAsync({ type: "nodebuffer" }), "application/zip");
+  const pdfPath = await saveGeneratedFile(`${folder}/tickets.pdf`, Buffer.from(await pdf.save()), "application/pdf");
 
   const updatedBatch = await db.generationBatch.update({
     where: { id: batch.id },
     data: {
-      manifestPath: toPublicPath(manifestPath),
-      zipPath: toPublicPath(zipPath),
-      pdfPath: toPublicPath(pdfPath),
+      manifestPath,
+      zipPath,
+      pdfPath,
     },
   });
 

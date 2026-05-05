@@ -1,7 +1,6 @@
-import path from "node:path";
 import sharp from "sharp";
 import { generateBarcodeBuffer } from "./barcode";
-import { publicPathToAbsolute } from "./files";
+import { readStoredFile } from "./files";
 import type { BarcodeType } from "./validations";
 
 export type PlacementLike = {
@@ -22,7 +21,7 @@ export type PlacementLike = {
 
 type ComposeTicketInput = {
   templatePath: string;
-  outputPath: string;
+  outputPath?: string;
   ticketCode: string;
   studentName?: string;
   placement: PlacementLike;
@@ -71,10 +70,8 @@ function rotatedPointInExpandedCanvas(width: number, height: number, pointX: num
 }
 
 export async function composeTicketImage(input: ComposeTicketInput) {
-  const templateAbsolute = input.templatePath.startsWith("/")
-    ? publicPathToAbsolute(input.templatePath)
-    : path.resolve(input.templatePath);
-  const metadata = await sharp(templateAbsolute).metadata();
+  const templateBuffer = await readStoredFile(input.templatePath);
+  const metadata = await sharp(templateBuffer).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error("Template tidak memiliki metadata dimensi yang valid.");
   }
@@ -172,8 +169,14 @@ export async function composeTicketImage(input: ComposeTicketInput) {
     composites.push({ input: rotatedBarcode, left: Math.round(centerX - rotatedWidth / 2), top: Math.round(centerY - rotatedHeight / 2) });
   }
 
-  await sharp(templateAbsolute)
+  const outputBuffer = await sharp(templateBuffer)
     .composite(composites)
     .png()
-    .toFile(input.outputPath);
+    .toBuffer();
+
+  if (input.outputPath) {
+    await sharp(outputBuffer).toFile(input.outputPath);
+  }
+
+  return outputBuffer;
 }
