@@ -49,7 +49,6 @@ async function createStudentNameLabel(input: {
       text: input.text,
       font: "sans bold",
       width: Math.round(input.width * 0.9),
-      height: input.height,
       align: "center",
       rgba: true,
       dpi: Math.round(72 * (input.fontSize / 12)),
