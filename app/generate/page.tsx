@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
-import { AlertTriangle, CheckCircle2, ChevronRight, FileText, QrCode, ShieldCheck, Sparkles, UploadCloud, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, FileText, LoaderCircle, QrCode, ShieldCheck, Sparkles, UploadCloud, Wand2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { BarcodeTypeSelector } from "@/components/BarcodeTypeSelector";
 import { BatchResultCard } from "@/components/BatchResultCard";
@@ -42,6 +42,13 @@ function ticketKey(ticket: Pick<ExistingTicket, "studentName" | "className" | "s
   return studentId ? `id:${studentId}|class:${className}` : `name:${ticket.studentName.trim().toLowerCase()}|class:${className}`;
 }
 
+function progressText(progress: number) {
+  if (progress < 25) return "Menyiapkan data siswa dan desain tiket...";
+  if (progress < 55) return "Membuat barcode dan gambar tiket satu per satu...";
+  if (progress < 82) return "Merapikan file gambar, PDF, dan daftar tiket...";
+  return "Hampir selesai. Menunggu server mengirim hasil...";
+}
+
 export default function GeneratePage() {
   const [events, setEvents] = useState<Option[]>([]);
   const [templates, setTemplates] = useState<Option[]>([]);
@@ -52,6 +59,7 @@ export default function GeneratePage() {
   const [errors, setErrors] = useState<{ row: number; message: string }[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState(0);
   const [batch, setBatch] = useState<BatchResult | null>(null);
   const [existingTickets, setExistingTickets] = useState<ExistingTicket[]>([]);
   const [skipDuplicates, setSkipDuplicates] = useState(false);
@@ -118,6 +126,21 @@ export default function GeneratePage() {
     [eventId, templateId, rows, errors, loading, hasDuplicates, skipDuplicates],
   );
 
+  useEffect(() => {
+    if (!loading) return;
+
+    const timer = window.setInterval(() => {
+      setGenerateProgress((current) => {
+        if (current < 28) return Math.min(current + 4, 28);
+        if (current < 62) return Math.min(current + 2.4, 62);
+        if (current < 86) return Math.min(current + 1.2, 86);
+        return Math.min(current + 0.4, 94);
+      });
+    }, 850);
+
+    return () => window.clearInterval(timer);
+  }, [loading]);
+
   async function parseFile(file: File | null) {
     setRows([]);
     setErrors([]);
@@ -140,6 +163,7 @@ export default function GeneratePage() {
 
   async function generate() {
     setLoading(true);
+    setGenerateProgress(6);
     setMessage("Membuat tiket HD, ZIP, PDF, dan manifest...");
     setBatch(null);
     const controller = new AbortController();
@@ -156,6 +180,7 @@ export default function GeneratePage() {
         setMessage(data.error ?? "Tiket belum berhasil dibuat.");
         return;
       }
+      setGenerateProgress(100);
       setBatch({ ...data.batch, tickets: data.tickets ?? [], skippedRows: data.skippedRows ?? 0 });
       setMessage(data.skippedRows ? `Tiket berhasil dibuat. ${data.skippedRows} data yang sama dilewati.` : "Tiket berhasil dibuat.");
     } catch (error) {
@@ -272,9 +297,34 @@ export default function GeneratePage() {
             onClick={generate}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 font-black text-white shadow-xl shadow-slate-900/20 hover:bg-slate-800 disabled:opacity-45"
           >
-            <Wand2 size={17} />
+            {loading ? <LoaderCircle size={17} className="animate-spin" /> : <Wand2 size={17} />}
             {loading ? "Membuat tiket..." : "Buat dan Unduh Tiket"}
           </button>
+          {loading && (
+            <div className="overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 p-3 text-blue-950 shadow-inner shadow-blue-100/60">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
+                    <LoaderCircle size={16} className="animate-spin" />
+                  </span>
+                  <div>
+                    <p className="font-black">Sedang membuat tiket</p>
+                    <p className="mt-1 text-xs leading-5 text-blue-800">{progressText(generateProgress)}</p>
+                  </div>
+                </div>
+                <p className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-blue-700 shadow-sm">
+                  {Math.round(generateProgress)}%
+                </p>
+              </div>
+              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-400 transition-all duration-700"
+                  style={{ width: `${generateProgress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-bold text-blue-800">Jangan tutup halaman ini sampai hasil unduhan muncul.</p>
+            </div>
+          )}
           <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
             Data yang sudah punya tiket akan ditahan agar nomor tiket tidak dobel.
           </p>
