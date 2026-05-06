@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, CheckCircle2, Download, QrCode, School, Ticket, XCircle } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { DeleteBatchButton } from "@/components/DeleteBatchButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { db } from "@/lib/db";
 
@@ -194,7 +195,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         <section className="mb-6 rounded-2xl border border-white/80 bg-white/90 shadow-xl shadow-slate-200/70 backdrop-blur">
           <div className="border-b border-slate-200 px-4 py-3">
             <h2 className="font-black text-slate-950">File tiket terakhir</h2>
-            <p className="mt-1 text-sm text-slate-500">Unduh ulang hasil tiket dari event ini.</p>
+            <p className="mt-1 text-sm text-slate-500">Unduh ulang atau hapus file tiket yang tidak ingin dipakai.</p>
           </div>
           <div className="grid gap-2 p-3 md:hidden">
             {event.batches.map((batch) => (
@@ -210,6 +211,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   <a className="rounded-lg bg-slate-950 px-2 py-2 text-center text-xs font-black text-white" href={`/api/batches/${batch.id}/download/pdf`}>PDF</a>
                   <a className="rounded-lg bg-slate-950 px-2 py-2 text-center text-xs font-black text-white" href={`/api/batches/${batch.id}/download/csv`}>Daftar</a>
                 </div>
+                <DeleteBatchButton batchId={batch.id} totalTickets={batch.totalTickets} className="mt-2" />
               </article>
             ))}
           </div>
@@ -220,7 +222,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   <th className="px-3 py-3">Tanggal</th>
                   <th className="px-3 py-3">Tiket</th>
                   <th className="px-3 py-3">Jenis scan</th>
-                  <th className="px-3 py-3">Unduh</th>
+                  <th className="px-3 py-3">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +238,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                         </a>
                         <a className="rounded-lg bg-slate-950 px-2 py-1 text-xs font-black text-white" href={`/api/batches/${batch.id}/download/pdf`}>PDF</a>
                         <a className="rounded-lg bg-slate-950 px-2 py-1 text-xs font-black text-white" href={`/api/batches/${batch.id}/download/csv`}>Daftar</a>
+                        <DeleteBatchButton batchId={batch.id} totalTickets={batch.totalTickets} />
                       </div>
                     </td>
                   </tr>

@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 export const appRoot = process.cwd();
 export const publicRoot = path.join(appRoot, "public");
@@ -71,6 +71,47 @@ async function putSupabaseFile(filePath: string, buffer: Buffer, contentType: st
   }
   const { data } = client.storage.from(bucket).getPublicUrl(filePath);
   return data.publicUrl;
+}
+
+function getSupabaseObjectPath(filePath: string) {
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || "ticket-files";
+  try {
+    const url = new URL(filePath);
+    const publicMarker = `/storage/v1/object/public/${bucket}/`;
+    const signedMarker = `/storage/v1/object/sign/${bucket}/`;
+    const marker = url.pathname.includes(publicMarker) ? publicMarker : signedMarker;
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteStoredFile(filePath?: string | null) {
+  if (!filePath) return;
+
+  try {
+    if (isRemoteUrl(filePath)) {
+      if (isSupabaseStorageEnabled()) {
+        const objectPath = getSupabaseObjectPath(filePath);
+        if (objectPath) {
+          const { bucket, client } = supabaseStorage();
+          await client.storage.from(bucket).remove([objectPath]);
+          return;
+        }
+      }
+
+      if (isBlobStorageEnabled()) {
+        await del(filePath);
+      }
+      return;
+    }
+
+    await unlink(publicPathToAbsolute(filePath));
+  } catch {
+    // File cleanup is best-effort. The database delete is the source of truth.
+  }
 }
 
 export async function readStoredFile(filePath: string) {
