@@ -20,6 +20,12 @@ type BatchResult = {
   manifestPath?: string | null;
   tickets?: GeneratedTicket[];
   skippedRows?: number;
+  batches?: {
+    totalTickets: number;
+    zipPath?: string | null;
+    pdfPath?: string | null;
+    manifestPath?: string | null;
+  }[];
 };
 type ExistingTicket = {
   id: string;
@@ -47,6 +53,16 @@ function progressText(progress: number) {
   if (progress < 55) return "Membuat barcode dan gambar tiket satu per satu...";
   if (progress < 82) return "Merapikan file gambar, PDF, dan daftar tiket...";
   return "Hampir selesai. Menunggu server mengirim hasil...";
+}
+
+const onlineChunkSize = 80;
+
+function chunkRows(rowsToChunk: CsvStudentRow[]) {
+  const chunks: CsvStudentRow[][] = [];
+  for (let index = 0; index < rowsToChunk.length; index += onlineChunkSize) {
+    chunks.push(rowsToChunk.slice(index, index + onlineChunkSize));
+  }
+  return chunks;
 }
 
 export default function GeneratePage() {
@@ -164,33 +180,71 @@ export default function GeneratePage() {
   async function generate() {
     setLoading(true);
     setGenerateProgress(6);
-    setMessage("Membuat tiket HD, ZIP, PDF, dan manifest...");
+    const chunks = chunkRows(rows);
+    setMessage(
+      chunks.length > 1
+        ? `Membuat ${rows.length} tiket dalam ${chunks.length} bagian agar proses online tetap stabil...`
+        : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
+    );
     setBatch(null);
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 70_000);
     try {
-      const response = await fetch("/api/generate/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId, templateId, barcodeType, rows, duplicateMode: skipDuplicates ? "skip" : "block" }),
-        signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({ error: "Server tidak mengirim pesan. Kemungkinan proses terlalu lama." }));
-      if (!response.ok) {
-        setMessage(data.error ?? "Tiket belum berhasil dibuat.");
-        return;
+      const generatedBatches: NonNullable<BatchResult["batches"]> = [];
+      const generatedTickets: GeneratedTicket[] = [];
+      let totalTickets = 0;
+      let skippedRows = 0;
+
+      for (const [chunkIndex, chunk] of chunks.entries()) {
+        setMessage(
+          chunks.length > 1
+            ? `Membuat bagian ${chunkIndex + 1} dari ${chunks.length} (${chunk.length} siswa)...`
+            : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
+        );
+        setGenerateProgress(Math.max(8, Math.round((chunkIndex / chunks.length) * 92)));
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 70_000);
+        const response = await fetch("/api/generate/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId, templateId, barcodeType, rows: chunk, duplicateMode: skipDuplicates ? "skip" : "block" }),
+          signal: controller.signal,
+        });
+        window.clearTimeout(timer);
+        const data = await response.json().catch(() => ({ error: "Server tidak mengirim pesan. Kemungkinan proses terlalu lama." }));
+        if (!response.ok) {
+          throw new Error(data.error ?? "Tiket belum berhasil dibuat.");
+        }
+
+        generatedBatches.push(data.batch);
+        generatedTickets.push(...(data.tickets ?? []));
+        totalTickets += data.batch?.totalTickets ?? 0;
+        skippedRows += data.skippedRows ?? 0;
       }
+
       setGenerateProgress(100);
-      setBatch({ ...data.batch, tickets: data.tickets ?? [], skippedRows: data.skippedRows ?? 0 });
-      setMessage(data.skippedRows ? `Tiket berhasil dibuat. ${data.skippedRows} data yang sama dilewati.` : "Tiket berhasil dibuat.");
+      setBatch({
+        totalTickets,
+        tickets: generatedTickets,
+        skippedRows,
+        batches: generatedBatches,
+        ...(generatedBatches.length === 1 ? generatedBatches[0] : {}),
+      });
+      setMessage(
+        skippedRows
+          ? `Tiket berhasil dibuat. ${skippedRows} data yang sama dilewati.`
+          : generatedBatches.length > 1
+            ? `Tiket berhasil dibuat dalam ${generatedBatches.length} bagian.`
+            : "Tiket berhasil dibuat.",
+      );
     } catch (error) {
       setMessage(
         error instanceof DOMException && error.name === "AbortError"
-          ? "Proses terlalu lama untuk server online. Pecah CSV menjadi batch lebih kecil, misalnya 50-80 siswa."
-          : "Koneksi generate terputus. Coba lagi dengan batch lebih kecil.",
+          ? "Salah satu bagian terlalu lama diproses. Coba ulangi, data yang sudah punya tiket bisa dilewati otomatis."
+          : error instanceof Error
+            ? error.message
+            : "Koneksi generate terputus. Coba lagi sebentar lagi.",
       );
     } finally {
-      window.clearTimeout(timer);
       setLoading(false);
     }
   }
@@ -309,7 +363,11 @@ export default function GeneratePage() {
                   </span>
                   <div>
                     <p className="font-black">Sedang membuat tiket</p>
-                    <p className="mt-1 text-xs leading-5 text-blue-800">{progressText(generateProgress)}</p>
+                    <p className="mt-1 text-xs leading-5 text-blue-800">
+                      {rows.length > onlineChunkSize
+                        ? `Memproses otomatis per bagian. ${progressText(generateProgress)}`
+                        : progressText(generateProgress)}
+                    </p>
                   </div>
                 </div>
                 <p className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-blue-700 shadow-sm">
@@ -326,7 +384,7 @@ export default function GeneratePage() {
             </div>
           )}
           <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
-            Data yang sudah punya tiket akan ditahan agar nomor tiket tidak dobel.
+            Data besar akan diproses otomatis per bagian. Data yang sudah punya tiket tetap ditahan agar nomor tidak dobel.
           </p>
           {message && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
         </section>

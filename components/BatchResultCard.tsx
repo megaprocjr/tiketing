@@ -5,7 +5,13 @@ export function BatchResultCard({
   tickets = [],
   skippedRows = 0,
 }: {
-  batch: { totalTickets: number; zipPath?: string | null; pdfPath?: string | null; manifestPath?: string | null };
+  batch: {
+    totalTickets: number;
+    zipPath?: string | null;
+    pdfPath?: string | null;
+    manifestPath?: string | null;
+    batches?: { totalTickets: number; zipPath?: string | null; pdfPath?: string | null; manifestPath?: string | null }[];
+  };
   tickets?: { id: string; ticketCode: string; studentName: string; className: string; generatedImagePath?: string | null }[];
   skippedRows?: number;
 }) {
@@ -34,6 +40,33 @@ export function BatchResultCard({
           </a>
         ))}
       </div>
+      {batch.batches && batch.batches.length > 1 && (
+        <div className="mt-4 overflow-hidden rounded-xl border border-emerald-200 bg-white">
+          <div className="bg-emerald-100 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-900">
+            File unduhan dibuat per bagian
+          </div>
+          <div className="divide-y divide-emerald-100">
+            {batch.batches.map((item, index) => (
+              <div key={`${item.zipPath}-${index}`} className="flex flex-col gap-2 px-3 py-3 text-sm md:flex-row md:items-center md:justify-between">
+                <p className="font-black text-slate-900">Bagian {index + 1} • {item.totalTickets} tiket</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { href: item.zipPath, label: "Gambar" },
+                    { href: item.pdfPath, label: "PDF" },
+                    { href: item.manifestPath, label: "Daftar" },
+                  ]
+                    .filter((link): link is { href: string; label: string } => Boolean(link.href))
+                    .map((link) => (
+                      <a key={link.href} href={link.href} download className="rounded-lg bg-emerald-700 px-2.5 py-1.5 text-xs font-black text-white hover:bg-emerald-800">
+                        {link.label}
+                      </a>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {tickets.length > 0 && (
         <div className="mt-4">
           <p className="text-xs font-black uppercase tracking-wide text-emerald-800">Contoh tiket jadi</p>
