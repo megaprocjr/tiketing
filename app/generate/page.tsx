@@ -141,6 +141,10 @@ export default function GeneratePage() {
       .filter((item): item is { row: CsvStudentRow; ticket: ExistingTicket } => Boolean(item));
   }, [existingTickets, rows]);
 
+  const existingRowKeys = useMemo(() => new Set(duplicateExisting.map(({ row }) => rowKey(row))), [duplicateExisting]);
+  const remainingRows = useMemo(() => rows.filter((row) => !existingRowKeys.has(rowKey(row))), [existingRowKeys, rows]);
+  const rowsToCreateCount = skipDuplicates ? remainingRows.length : rows.length;
+  const plannedChunkCount = chunkRowsByClass(skipDuplicates ? remainingRows : rows).length;
   const hasDuplicates = duplicateInCsv.length > 0 || duplicateExisting.length > 0;
   const hasExistingTicketsInCsv = duplicateExisting.length > 0;
   const selectedEvent = events.find((event) => event.id === eventId);
@@ -148,13 +152,21 @@ export default function GeneratePage() {
   const readySteps = [
     { label: "Event", done: Boolean(eventId), value: selectedEvent?.name ?? "Belum dipilih" },
     { label: "Desain", done: Boolean(templateId), value: selectedTemplate?.name ?? "Belum dipilih" },
-    { label: "Data siswa", done: rows.length > 0 && errors.length === 0, value: rows.length ? `${rows.length} siswa` : "Menunggu CSV" },
+    {
+      label: "Data siswa",
+      done: rows.length > 0 && errors.length === 0,
+      value: rows.length
+        ? hasExistingTicketsInCsv
+          ? `${rows.length} siswa, sisa ${remainingRows.length}`
+          : `${rows.length} siswa`
+        : "Menunggu CSV",
+    },
     { label: "Keamanan", done: !hasDuplicates || skipDuplicates, value: hasDuplicates ? (skipDuplicates ? "Dobel dilewati" : "Perlu dicek") : "Aman" },
   ];
 
   const canGenerate = useMemo(
-    () => eventId && templateId && rows.length > 0 && errors.length === 0 && !loading && (!hasDuplicates || skipDuplicates),
-    [eventId, templateId, rows, errors, loading, hasDuplicates, skipDuplicates],
+    () => eventId && templateId && rowsToCreateCount > 0 && errors.length === 0 && !loading && (!hasDuplicates || skipDuplicates),
+    [eventId, templateId, rowsToCreateCount, errors, loading, hasDuplicates, skipDuplicates],
   );
 
   useEffect(() => {
@@ -201,8 +213,7 @@ export default function GeneratePage() {
   async function generate() {
     setLoading(true);
     setGenerateProgress(6);
-    const duplicateExistingKeys = new Set(duplicateExisting.map(({ row }) => rowKey(row)));
-    const rowsForGeneration = skipDuplicates ? rows.filter((row) => !duplicateExistingKeys.has(rowKey(row))) : rows;
+    const rowsForGeneration = skipDuplicates ? remainingRows : rows;
     const chunks = chunkRowsByClass(rowsForGeneration);
     if (!chunks.length) {
       setMessage("Semua data di file ini sudah punya tiket. Tidak ada sisa data yang perlu dibuat.");
@@ -211,7 +222,7 @@ export default function GeneratePage() {
     }
     setMessage(
       chunks.length > 1
-        ? `Membuat ${rowsForGeneration.length} tiket per kelas dalam ${chunks.length} file unduhan...`
+        ? `Membuat ${rowsForGeneration.length} tiket tersisa per kelas dalam ${chunks.length} file unduhan...`
         : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
     );
     setBatch(null);
@@ -376,13 +387,32 @@ export default function GeneratePage() {
               </span>
             </label>
           )}
+          {hasExistingTicketsInCsv && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm leading-5 text-blue-950">
+              <p className="font-black">Sisa tiket yang belum dibuat: {remainingRows.length}</p>
+              <p className="mt-1 text-blue-800">
+                Sudah ada {duplicateExisting.length} tiket dari file ini. Klik tombol lanjutkan, lalu tetap di halaman ini sampai semua kelas selesai dibuat.
+              </p>
+            </div>
+          )}
+          {rows.length > 0 && plannedChunkCount > 1 && (
+            <div className="rounded-2xl bg-slate-100 p-3 text-xs leading-5 text-slate-700">
+              File akan dibuat per kelas menjadi {plannedChunkCount} paket unduhan supaya lebih ringan dan mudah dibagikan ke panitia.
+            </div>
+          )}
           <button
             disabled={!canGenerate}
             onClick={generate}
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 font-black text-white shadow-xl shadow-slate-900/20 hover:bg-slate-800 disabled:opacity-45"
           >
             {loading ? <LoaderCircle size={17} className="animate-spin" /> : <Wand2 size={17} />}
-            {loading ? "Membuat tiket..." : "Buat dan Unduh Tiket"}
+            {loading
+              ? "Membuat tiket..."
+              : hasExistingTicketsInCsv
+                ? remainingRows.length > 0
+                  ? `Lanjutkan ${remainingRows.length} Tiket`
+                  : "Semua Tiket Sudah Ada"
+                : "Buat dan Unduh Tiket"}
           </button>
           {loading && (
             <div className="overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 p-3 text-blue-950 shadow-inner shadow-blue-100/60">
@@ -410,7 +440,9 @@ export default function GeneratePage() {
                   style={{ width: `${generateProgress}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs font-bold text-blue-800">Jangan tutup halaman ini sampai hasil unduhan muncul.</p>
+              <p className="mt-2 text-xs font-bold text-blue-800">
+                Jangan pindah menu atau tutup halaman ini sampai semua paket kelas muncul.
+              </p>
             </div>
           )}
           <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
