@@ -28,16 +28,53 @@ type ComposeTicketInput = {
   barcodeType?: BarcodeType;
 };
 
-function escapeSvgText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+async function createStudentNameLabel(input: {
+  text: string;
+  width: number;
+  height: number;
+  fontSize: number;
+  background: "white" | "transparent" | string;
+}) {
+  const background =
+    input.background === "transparent"
+      ? { r: 255, g: 255, b: 255, alpha: 0 }
+      : { r: 255, g: 255, b: 255, alpha: 0.92 };
+  const textBuffer = await sharp({
+    text: {
+      text: input.text,
+      font: "sans bold",
+      width: Math.round(input.width * 0.9),
+      height: input.height,
+      align: "center",
+      rgba: true,
+      dpi: Math.round(72 * (input.fontSize / 12)),
+    },
+  })
+    .png()
+    .toBuffer();
+  const textMeta = await sharp(textBuffer).metadata();
+
+  return sharp({
+    create: {
+      width: input.width,
+      height: input.height,
+      channels: 4,
+      background,
+    },
+  })
+    .composite([
+      {
+        input: textBuffer,
+        left: Math.max(0, Math.round((input.width - (textMeta.width ?? input.width)) / 2)),
+        top: Math.max(0, Math.round((input.height - (textMeta.height ?? input.height)) / 2)),
+      },
+    ])
+    .png()
+    .toBuffer();
 }
 
 function rotatedPointInExpandedCanvas(width: number, height: number, pointX: number, pointY: number, rotation: number) {
@@ -100,7 +137,6 @@ export async function composeTicketImage(input: ComposeTicketInput) {
   const rotation = input.placement.rotation ?? 0;
   const composites: sharp.OverlayOptions[] = [];
   if (input.studentName?.trim() && input.placement.showStudentName !== false) {
-    const text = escapeSvgText(input.studentName.trim());
     const textBoxWidth = Math.round(Math.max(barcodeWidth, rawWidth, metadata.width * 0.16));
     const configuredFont = metadata.width * ((input.placement.studentNameFontPercent ?? 3) / 100);
     const fontSize = Math.round(clamp(configuredFont, 12, metadata.width * 0.08));
@@ -111,18 +147,13 @@ export async function composeTicketImage(input: ComposeTicketInput) {
     const barcodeLeft = Math.round((groupWidth - barcodeWidth) / 2);
     const labelLeft = Math.round((groupWidth - textBoxWidth) / 2);
     const labelTop = barcodeHeight + Math.max(0, offsetPx);
-    const backgroundRect =
-      input.placement.studentNameBackground === "transparent"
-        ? ""
-        : `<rect x="0" y="0" width="${textBoxWidth}" height="${textBoxHeight}" rx="${Math.round(fontSize * 0.25)}" fill="white" fill-opacity="0.92"/>`;
-    const labelSvg = Buffer.from(`
-      <svg width="${textBoxWidth}" height="${textBoxHeight}" xmlns="http://www.w3.org/2000/svg">
-        ${backgroundRect}
-        <text x="${textBoxWidth / 2}" y="${Math.round(textBoxHeight / 2 + fontSize * 0.35)}"
-          font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700"
-          fill="#111827" text-anchor="middle" textLength="${Math.round(textBoxWidth * 0.88)}" lengthAdjust="spacingAndGlyphs">${text}</text>
-      </svg>
-    `);
+    const label = await createStudentNameLabel({
+      text: input.studentName.trim(),
+      width: textBoxWidth,
+      height: textBoxHeight,
+      fontSize,
+      background: input.placement.studentNameBackground ?? "white",
+    });
     const group = await sharp({
       create: {
         width: groupWidth,
@@ -133,7 +164,7 @@ export async function composeTicketImage(input: ComposeTicketInput) {
     })
       .composite([
         { input: barcode, left: barcodeLeft, top: 0 },
-        { input: labelSvg, left: labelLeft, top: labelTop },
+        { input: label, left: labelLeft, top: labelTop },
       ])
       .png()
       .toBuffer();
