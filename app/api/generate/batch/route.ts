@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 import { db } from "@/lib/db";
-import { batchFolderName, sanitizeFilePart, saveGeneratedFile } from "@/lib/files";
+import { batchFolderName, deleteStoredFile, sanitizeFilePart, saveGeneratedFile } from "@/lib/files";
 import { composeTicketImage } from "@/lib/image-compose";
 import { formatTicketCode } from "@/lib/ticket-code";
 import { generateBatchSchema } from "@/lib/validations";
@@ -20,6 +21,14 @@ function studentKey(row: { student_name: string; class_name: string; student_id?
   const name = row.student_name.trim().toLowerCase();
   const className = row.class_name.trim().toLowerCase();
   return id ? `id:${id}|class:${className}` : `name:${name}|class:${className}`;
+}
+
+async function makePdfImage(input: Buffer) {
+  if (!process.env.VERCEL) return input;
+  return sharp(input)
+    .resize({ width: 1600, withoutEnlargement: true })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
 }
 
 export async function POST(request: Request) {
@@ -116,87 +125,113 @@ export async function POST(request: Request) {
   const folder = `${event.id}/${batchFolderName()}`;
   const startCount = await db.ticket.count({ where: { eventId: event.id } });
 
-  const batch = await db.generationBatch.create({
-    data: {
-      eventId: event.id,
-      templateId: template.id,
-      barcodeType: parsed.data.barcodeType,
-      totalTickets: rowsToGenerate.length,
-    },
-  });
+  let batchId: string | null = null;
+  const savedFiles: string[] = [];
 
-  const zip = new JSZip();
-  const pdf = await PDFDocument.create();
-  const manifestRows = [
-    ["ticket_code", "student_name", "class_name", "student_id", "package_name", "parent_name", "phone", "notes", "image_path"].join(","),
-  ];
-  const createdTickets = [];
-
-  for (const [index, row] of rowsToGenerate.entries()) {
-    const ticketCode = formatTicketCode(event.codePrefix, startCount + index + 1);
-    const fileName = `${sanitizeFilePart(row.class_name)}-${sanitizeFilePart(row.student_name)}-${ticketCode}.png`;
-
-    const pngBytes = await composeTicketImage({
-      templatePath: template.filePath,
-      ticketCode,
-      studentName: row.student_name,
-      placement,
-      barcodeType: parsed.data.barcodeType,
-    });
-
-    const imagePath = await saveGeneratedFile(`${folder}/${fileName}`, pngBytes, "image/png");
-    const ticket = await db.ticket.create({
+  try {
+    const batch = await db.generationBatch.create({
       data: {
         eventId: event.id,
         templateId: template.id,
-        studentName: row.student_name,
-        className: row.class_name,
-        studentId: row.student_id || null,
-        packageName: row.package_name || null,
-        parentName: row.parent_name || null,
-        phone: row.phone || null,
-        notes: row.notes || null,
-        ticketCode,
         barcodeType: parsed.data.barcodeType,
-        generatedImagePath: imagePath,
-        batchId: batch.id,
+        totalTickets: rowsToGenerate.length,
       },
     });
-    createdTickets.push(ticket);
+    batchId = batch.id;
 
-    zip.file(fileName, pngBytes);
-    const embedded = await pdf.embedPng(pngBytes);
-    const page = pdf.addPage([embedded.width, embedded.height]);
-    page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
-    manifestRows.push(
-      [
+    const zip = new JSZip();
+    const pdf = await PDFDocument.create();
+    const manifestRows = [
+      ["ticket_code", "student_name", "class_name", "student_id", "package_name", "parent_name", "phone", "notes", "image_path"].join(","),
+    ];
+    const createdTickets = [];
+
+    for (const [index, row] of rowsToGenerate.entries()) {
+      const ticketCode = formatTicketCode(event.codePrefix, startCount + index + 1);
+      const fileName = `${sanitizeFilePart(row.class_name)}-${sanitizeFilePart(row.student_name)}-${ticketCode}.png`;
+
+      const pngBytes = await composeTicketImage({
+        templatePath: template.filePath,
         ticketCode,
-        row.student_name,
-        row.class_name,
-        row.student_id,
-        row.package_name,
-        row.parent_name,
-        row.phone,
-        row.notes,
-        imagePath,
-      ]
-        .map(csvCell)
-        .join(","),
+        studentName: row.student_name,
+        placement,
+        barcodeType: parsed.data.barcodeType,
+      });
+
+      const imagePath = await saveGeneratedFile(`${folder}/${fileName}`, pngBytes, "image/png");
+      savedFiles.push(imagePath);
+      const ticket = await db.ticket.create({
+        data: {
+          eventId: event.id,
+          templateId: template.id,
+          studentName: row.student_name,
+          className: row.class_name,
+          studentId: row.student_id || null,
+          packageName: row.package_name || null,
+          parentName: row.parent_name || null,
+          phone: row.phone || null,
+          notes: row.notes || null,
+          ticketCode,
+          barcodeType: parsed.data.barcodeType,
+          generatedImagePath: imagePath,
+          batchId: batch.id,
+        },
+      });
+      createdTickets.push(ticket);
+
+      zip.file(fileName, pngBytes);
+      const pdfBytes = await makePdfImage(pngBytes);
+      const embedded = await pdf.embedPng(pdfBytes);
+      const page = pdf.addPage([embedded.width, embedded.height]);
+      page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
+      manifestRows.push(
+        [
+          ticketCode,
+          row.student_name,
+          row.class_name,
+          row.student_id,
+          row.package_name,
+          row.parent_name,
+          row.phone,
+          row.notes,
+          imagePath,
+        ]
+          .map(csvCell)
+          .join(","),
+      );
+    }
+
+    const manifestPath = await saveGeneratedFile(`${folder}/manifest.csv`, Buffer.from(manifestRows.join("\n")), "text/csv; charset=utf-8");
+    savedFiles.push(manifestPath);
+    const zipPath = await saveGeneratedFile(`${folder}/tickets.zip`, await zip.generateAsync({ type: "nodebuffer" }), "application/zip");
+    savedFiles.push(zipPath);
+    const pdfPath = await saveGeneratedFile(`${folder}/tickets.pdf`, Buffer.from(await pdf.save()), "application/pdf");
+    savedFiles.push(pdfPath);
+
+    const updatedBatch = await db.generationBatch.update({
+      where: { id: batch.id },
+      data: {
+        manifestPath,
+        zipPath,
+        pdfPath,
+      },
+    });
+
+    return NextResponse.json({ batch: updatedBatch, tickets: createdTickets, skippedRows });
+  } catch (error) {
+    if (batchId) {
+      await db.ticket.deleteMany({ where: { batchId } }).catch(() => undefined);
+      await db.generationBatch.deleteMany({ where: { id: batchId } }).catch(() => undefined);
+    }
+    await Promise.allSettled(savedFiles.map((filePath) => deleteStoredFile(filePath)));
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? `Tiket belum berhasil dibuat: ${error.message}`
+            : "Tiket belum berhasil dibuat. Coba ulangi sebentar lagi.",
+      },
+      { status: 500 },
     );
   }
-
-  const manifestPath = await saveGeneratedFile(`${folder}/manifest.csv`, Buffer.from(manifestRows.join("\n")), "text/csv; charset=utf-8");
-  const zipPath = await saveGeneratedFile(`${folder}/tickets.zip`, await zip.generateAsync({ type: "nodebuffer" }), "application/zip");
-  const pdfPath = await saveGeneratedFile(`${folder}/tickets.pdf`, Buffer.from(await pdf.save()), "application/pdf");
-
-  const updatedBatch = await db.generationBatch.update({
-    where: { id: batch.id },
-    data: {
-      manifestPath,
-      zipPath,
-      pdfPath,
-    },
-  });
-
-  return NextResponse.json({ batch: updatedBatch, tickets: createdTickets, skippedRows });
 }
