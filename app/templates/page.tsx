@@ -41,20 +41,25 @@ export default function TemplatesPage() {
     }
     setLoading(true);
     setMessage("");
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("name", name);
-    const response = await fetch("/api/templates", { method: "POST", body: formData });
-    const data = await response.json();
-    setLoading(false);
-    if (!response.ok) {
-      setMessage(data.error ?? "Desain belum berhasil diupload.");
-      return;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", name);
+      const response = await fetch("/api/templates", { method: "POST", body: formData });
+      const data = await response.json().catch(() => ({ error: "Server belum mengirim pesan error." }));
+      if (!response.ok) {
+        setMessage(data.error ?? "Desain belum berhasil diupload.");
+        return;
+      }
+      setFile(null);
+      setName("");
+      setMessage("Desain tiket berhasil disimpan.");
+      await load();
+    } catch {
+      setMessage("Koneksi upload terputus. Coba lagi atau kecilkan ukuran file.");
+    } finally {
+      setLoading(false);
     }
-    setFile(null);
-    setName("");
-    setMessage("Desain tiket berhasil disimpan.");
-    await load();
   }
 
   async function deleteTemplate(template: TemplateItem) {
