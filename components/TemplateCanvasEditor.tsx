@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { LayoutTemplate, Move, RotateCw, Save, Wand2 } from "lucide-react";
 import { BarcodeTypeSelector } from "./BarcodeTypeSelector";
@@ -229,7 +228,8 @@ export function TemplateCanvasEditor({
           className="relative mx-auto overflow-hidden rounded-xl bg-slate-100"
           style={{ aspectRatio: `${template.width}/${template.height}` }}
         >
-          <Image src={template.filePath} alt={template.name} fill className="object-contain" sizes="(max-width: 1024px) 100vw, 70vw" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={template.filePath} alt={template.name} className="absolute inset-0 h-full w-full object-contain" />
           <div className="absolute overflow-visible" style={barcodeStyle}>
             <button
               type="button"
