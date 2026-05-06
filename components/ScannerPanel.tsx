@@ -54,6 +54,11 @@ const formatByMode: Record<BarcodeType, Html5QrcodeSupportedFormats[]> = {
   code128: [Html5QrcodeSupportedFormats.CODE_128],
   pdf417: [Html5QrcodeSupportedFormats.PDF_417],
 };
+const autoRearCameraId = "__auto_rear_camera__";
+
+function findRearCamera(devices: CameraDevice[]) {
+  return devices.find((device) => /back|rear|environment|belakang|kamera belakang/i.test(device.label));
+}
 
 export function ScannerPanel() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -77,7 +82,7 @@ export function ScannerPanel() {
     Html5Qrcode.getCameras()
       .then((devices) => {
         setCameras(devices);
-        setCameraId(devices[0]?.id ?? "");
+        setCameraId(findRearCamera(devices)?.id ?? autoRearCameraId);
       })
       .catch(() => setError("Kamera belum tersedia. Pastikan izin kamera diberikan dan gunakan localhost/HTTPS."));
 
@@ -287,22 +292,39 @@ export function ScannerPanel() {
       verbose: false,
     });
     scannerRef.current = scanner;
-    await scanner.start(
-      cameraId,
-      {
-        fps: 12,
-        qrbox: (viewfinderWidth, viewfinderHeight) => ({
-          width: Math.floor(viewfinderWidth * (scanMode === "qrcode" ? 0.58 : 0.86)),
-          height: Math.floor(
-            scanMode === "qrcode"
-              ? Math.min(viewfinderWidth * 0.58, viewfinderHeight * 0.72)
-              : Math.min(viewfinderHeight * (scanMode === "pdf417" ? 0.42 : 0.28), 260),
-          ),
-        }),
-      },
-      (decodedText) => void checkIn(decodedText.trim()),
-      () => undefined,
-    );
+    const cameraConfig: string | MediaTrackConstraints =
+      cameraId === autoRearCameraId ? { facingMode: { ideal: "environment" } } : cameraId;
+    const scanConfig = {
+      fps: 12,
+      qrbox: (viewfinderWidth: number, viewfinderHeight: number) => ({
+        width: Math.floor(viewfinderWidth * (scanMode === "qrcode" ? 0.58 : 0.86)),
+        height: Math.floor(
+          scanMode === "qrcode"
+            ? Math.min(viewfinderWidth * 0.58, viewfinderHeight * 0.72)
+            : Math.min(viewfinderHeight * (scanMode === "pdf417" ? 0.42 : 0.28), 260),
+        ),
+      }),
+    };
+    const onSuccess = (decodedText: string) => void checkIn(decodedText.trim());
+    const onError = () => undefined;
+
+    try {
+      await scanner.start(cameraConfig, scanConfig, onSuccess, onError);
+    } catch (error) {
+      const fallbackCameraId = findRearCamera(cameras)?.id ?? cameras[0]?.id;
+      if (!fallbackCameraId || fallbackCameraId === cameraId) {
+        scannerRef.current = null;
+        setError("Kamera belakang belum bisa dibuka. Pilih kamera lain dari daftar, lalu coba lagi.");
+        return;
+      }
+      await scanner.start(
+        fallbackCameraId,
+        scanConfig,
+        onSuccess,
+        onError,
+      );
+      setCameraId(fallbackCameraId);
+    }
     setRunning(true);
   }
 
@@ -312,6 +334,17 @@ export function ScannerPanel() {
     setRunning(false);
   }
 
+  async function refreshCameras() {
+    setError("");
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      setCameras(devices);
+      setCameraId((current) => (current && current !== autoRearCameraId ? current : findRearCamera(devices)?.id ?? autoRearCameraId));
+    } catch {
+      setError("Daftar kamera belum bisa dibaca. Pastikan izin kamera sudah diberikan.");
+    }
+  }
+
   return (
     <div className="grid gap-4 md:gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
       <section className="rounded-2xl border border-white/80 bg-white/90 p-4 shadow-xl shadow-slate-200/70 backdrop-blur md:p-5">
@@ -319,18 +352,30 @@ export function ScannerPanel() {
           <div className="grid gap-2 min-[390px]:grid-cols-2">
             <label className="text-xs font-bold text-slate-500">
               Kamera
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
-                value={cameraId}
-                onChange={(event) => setCameraId(event.target.value)}
-                disabled={running}
-              >
-                {cameras.map((camera) => (
-                  <option key={camera.id} value={camera.id}>
-                    {camera.label || `Kamera ${camera.id}`}
-                  </option>
-                ))}
-              </select>
+              <div className="mt-1 flex gap-2">
+                <select
+                  className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                  value={cameraId}
+                  onChange={(event) => setCameraId(event.target.value)}
+                  disabled={running}
+                >
+                  <option value={autoRearCameraId}>Kamera belakang otomatis</option>
+                  {cameras.map((camera) => (
+                    <option key={camera.id} value={camera.id}>
+                      {camera.label || `Kamera ${camera.id}`}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void refreshCameras()}
+                  disabled={running}
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-300 bg-white text-slate-700 disabled:opacity-50"
+                  aria-label="Muat ulang kamera"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              </div>
             </label>
             <label className="text-xs font-bold text-slate-500">
               Mode scan
@@ -370,7 +415,7 @@ export function ScannerPanel() {
           </div>
         </div>
         <p className="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
-          {scanModes.find((mode) => mode.value === scanMode)?.helper}
+          {scanModes.find((mode) => mode.value === scanMode)?.helper} Di HP, pilihan otomatis akan mencoba kamera belakang.
         </p>
         <div id="scanner-reader" className="min-h-[300px] overflow-hidden rounded-2xl bg-slate-950 shadow-inner md:min-h-[360px]" />
         {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
