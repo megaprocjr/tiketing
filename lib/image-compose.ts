@@ -26,6 +26,7 @@ type ComposeTicketInput = {
   studentName?: string;
   placement: PlacementLike;
   barcodeType?: BarcodeType;
+  maxWidth?: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -107,7 +108,12 @@ function rotatedPointInExpandedCanvas(width: number, height: number, pointX: num
 }
 
 export async function composeTicketImage(input: ComposeTicketInput) {
-  const templateBuffer = await readStoredFile(input.templatePath);
+  const sourceTemplateBuffer = await readStoredFile(input.templatePath);
+  const sourceMetadata = await sharp(sourceTemplateBuffer).metadata();
+  const templateBuffer =
+    input.maxWidth && sourceMetadata.width && sourceMetadata.width > input.maxWidth
+      ? await sharp(sourceTemplateBuffer).resize({ width: input.maxWidth, withoutEnlargement: true }).png().toBuffer()
+      : sourceTemplateBuffer;
   const metadata = await sharp(templateBuffer).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error("Template tidak memiliki metadata dimensi yang valid.");

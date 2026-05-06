@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { LayoutTemplate, Move, RotateCw, Save, Wand2 } from "lucide-react";
+import { LayoutTemplate, LoaderCircle, Move, RotateCw, Save, Wand2 } from "lucide-react";
 import { BarcodeTypeSelector } from "./BarcodeTypeSelector";
 import type { BarcodeType } from "@/lib/validations";
 
@@ -91,6 +91,7 @@ export function TemplateCanvasEditor({
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const barcodeStyle = useMemo(
     () => ({
@@ -200,24 +201,47 @@ export function TemplateCanvasEditor({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Gagal menyimpan posisi.");
       setMessage("Posisi barcode tersimpan.");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Gagal menyimpan posisi.");
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
   async function testPreview() {
-    await save();
-    setMessage("Membuat preview dummy...");
-    const response = await fetch(`/api/templates/${template.id}/preview`, { method: "POST" });
-    const data = await response.json();
-    if (!response.ok) {
-      setMessage(data.error ?? "Gagal membuat preview.");
+    setPreviewing(true);
+    const saved = await save();
+    if (!saved) {
+      setPreviewing(false);
       return;
     }
-    setPreview(`${data.imagePath}?t=${Date.now()}`);
-    setMessage("Preview dummy berhasil dibuat.");
+    setMessage("Membuat preview ringan...");
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 35_000);
+    try {
+      const response = await fetch(`/api/templates/${template.id}/preview`, {
+        method: "POST",
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({ error: "Server belum mengirim pesan preview." }));
+      if (!response.ok) {
+        setMessage(data.error ?? "Gagal membuat preview.");
+        return;
+      }
+      setPreview(`${data.imagePath}?t=${Date.now()}`);
+      setMessage("Preview dummy berhasil dibuat.");
+    } catch (error) {
+      setMessage(
+        error instanceof DOMException && error.name === "AbortError"
+          ? "Preview terlalu lama. Coba ulangi, atau kecilkan ukuran desain sebelum upload."
+          : "Preview belum berhasil dibuat. Coba ulangi sebentar lagi.",
+      );
+    } finally {
+      window.clearTimeout(timer);
+      setPreviewing(false);
+    }
   }
 
   return (
@@ -406,7 +430,7 @@ export function TemplateCanvasEditor({
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || previewing}
             onClick={save}
             className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-60"
           >
@@ -416,10 +440,11 @@ export function TemplateCanvasEditor({
           <button
             type="button"
             onClick={testPreview}
-            className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50"
+            disabled={saving || previewing}
+            className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50 disabled:opacity-60"
           >
-            <Wand2 size={16} />
-            Coba Preview
+            {previewing ? <LoaderCircle size={16} className="animate-spin" /> : <Wand2 size={16} />}
+            {previewing ? "Membuat preview..." : "Coba Preview"}
           </button>
         </div>
         {message && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
