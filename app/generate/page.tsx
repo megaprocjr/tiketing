@@ -21,6 +21,7 @@ type BatchResult = {
   tickets?: GeneratedTicket[];
   skippedRows?: number;
   batches?: {
+    label?: string;
     totalTickets: number;
     zipPath?: string | null;
     pdfPath?: string | null;
@@ -57,10 +58,23 @@ function progressText(progress: number) {
 
 const onlineChunkSize = 80;
 
-function chunkRows(rowsToChunk: CsvStudentRow[]) {
-  const chunks: CsvStudentRow[][] = [];
-  for (let index = 0; index < rowsToChunk.length; index += onlineChunkSize) {
-    chunks.push(rowsToChunk.slice(index, index + onlineChunkSize));
+function chunkRowsByClass(rowsToChunk: CsvStudentRow[]) {
+  const groups = new Map<string, CsvStudentRow[]>();
+  for (const row of rowsToChunk) {
+    const className = row.class_name.trim() || "Tanpa kelas";
+    groups.set(className, [...(groups.get(className) ?? []), row]);
+  }
+
+  const chunks: { label: string; rows: CsvStudentRow[] }[] = [];
+  for (const [className, classRows] of groups.entries()) {
+    const totalParts = Math.ceil(classRows.length / onlineChunkSize);
+    for (let index = 0; index < classRows.length; index += onlineChunkSize) {
+      const part = Math.floor(index / onlineChunkSize) + 1;
+      chunks.push({
+        label: totalParts > 1 ? `${className} bagian ${part}` : className,
+        rows: classRows.slice(index, index + onlineChunkSize),
+      });
+    }
   }
   return chunks;
 }
@@ -180,10 +194,10 @@ export default function GeneratePage() {
   async function generate() {
     setLoading(true);
     setGenerateProgress(6);
-    const chunks = chunkRows(rows);
+    const chunks = chunkRowsByClass(rows);
     setMessage(
       chunks.length > 1
-        ? `Membuat ${rows.length} tiket dalam ${chunks.length} bagian agar proses online tetap stabil...`
+        ? `Membuat ${rows.length} tiket per kelas dalam ${chunks.length} file unduhan...`
         : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
     );
     setBatch(null);
@@ -196,7 +210,7 @@ export default function GeneratePage() {
       for (const [chunkIndex, chunk] of chunks.entries()) {
         setMessage(
           chunks.length > 1
-            ? `Membuat bagian ${chunkIndex + 1} dari ${chunks.length} (${chunk.length} siswa)...`
+            ? `Membuat kelas ${chunk.label} (${chunkIndex + 1} dari ${chunks.length}, ${chunk.rows.length} siswa)...`
             : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
         );
         setGenerateProgress(Math.max(8, Math.round((chunkIndex / chunks.length) * 92)));
@@ -206,7 +220,7 @@ export default function GeneratePage() {
         const response = await fetch("/api/generate/batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId, templateId, barcodeType, rows: chunk, duplicateMode: skipDuplicates ? "skip" : "block" }),
+          body: JSON.stringify({ eventId, templateId, barcodeType, rows: chunk.rows, duplicateMode: skipDuplicates ? "skip" : "block" }),
           signal: controller.signal,
         });
         window.clearTimeout(timer);
@@ -215,7 +229,7 @@ export default function GeneratePage() {
           throw new Error(data.error ?? "Tiket belum berhasil dibuat.");
         }
 
-        generatedBatches.push(data.batch);
+        generatedBatches.push({ ...data.batch, label: chunk.label });
         generatedTickets.push(...(data.tickets ?? []));
         totalTickets += data.batch?.totalTickets ?? 0;
         skippedRows += data.skippedRows ?? 0;
@@ -233,7 +247,7 @@ export default function GeneratePage() {
         skippedRows
           ? `Tiket berhasil dibuat. ${skippedRows} data yang sama dilewati.`
           : generatedBatches.length > 1
-            ? `Tiket berhasil dibuat dalam ${generatedBatches.length} bagian.`
+            ? `Tiket berhasil dibuat per kelas dalam ${generatedBatches.length} file unduhan.`
             : "Tiket berhasil dibuat.",
       );
     } catch (error) {
@@ -365,7 +379,7 @@ export default function GeneratePage() {
                     <p className="font-black">Sedang membuat tiket</p>
                     <p className="mt-1 text-xs leading-5 text-blue-800">
                       {rows.length > onlineChunkSize
-                        ? `Memproses otomatis per bagian. ${progressText(generateProgress)}`
+                        ? `Memproses otomatis per kelas. ${progressText(generateProgress)}`
                         : progressText(generateProgress)}
                     </p>
                   </div>
@@ -384,7 +398,7 @@ export default function GeneratePage() {
             </div>
           )}
           <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
-            Data besar akan diproses otomatis per bagian. Data yang sudah punya tiket tetap ditahan agar nomor tidak dobel.
+            Data besar akan diproses otomatis per kelas. Tiap kelas mendapat ZIP gambar, PDF, dan daftar sendiri.
           </p>
           {message && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
         </section>

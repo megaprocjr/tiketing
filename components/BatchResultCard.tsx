@@ -10,7 +10,7 @@ export function BatchResultCard({
     zipPath?: string | null;
     pdfPath?: string | null;
     manifestPath?: string | null;
-    batches?: { totalTickets: number; zipPath?: string | null; pdfPath?: string | null; manifestPath?: string | null }[];
+    batches?: { label?: string; totalTickets: number; zipPath?: string | null; pdfPath?: string | null; manifestPath?: string | null }[];
   };
   tickets?: { id: string; ticketCode: string; studentName: string; className: string; generatedImagePath?: string | null }[];
   skippedRows?: number;
@@ -43,12 +43,12 @@ export function BatchResultCard({
       {batch.batches && batch.batches.length > 1 && (
         <div className="mt-4 overflow-hidden rounded-xl border border-emerald-200 bg-white">
           <div className="bg-emerald-100 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-900">
-            File unduhan dibuat per bagian
+            File unduhan per kelas
           </div>
           <div className="divide-y divide-emerald-100">
             {batch.batches.map((item, index) => (
               <div key={`${item.zipPath}-${index}`} className="flex flex-col gap-2 px-3 py-3 text-sm md:flex-row md:items-center md:justify-between">
-                <p className="font-black text-slate-900">Bagian {index + 1} • {item.totalTickets} tiket</p>
+                <p className="font-black text-slate-900">{item.label ?? `Bagian ${index + 1}`} • {item.totalTickets} tiket</p>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { href: item.zipPath, label: "Gambar" },
