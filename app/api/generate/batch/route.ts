@@ -8,6 +8,7 @@ import { formatTicketCode } from "@/lib/ticket-code";
 import { generateBatchSchema } from "@/lib/validations";
 
 export const maxDuration = 60;
+const maxOnlineRows = 80;
 
 function csvCell(value: string | null | undefined) {
   const text = value ?? "";
@@ -100,6 +101,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Semua data sudah pernah dibuat. Tidak ada tiket baru yang perlu dibuat." },
       { status: 409 },
+    );
+  }
+
+  if (process.env.VERCEL && rowsToGenerate.length > maxOnlineRows) {
+    return NextResponse.json(
+      {
+        error: `Untuk versi online, buat maksimal ${maxOnlineRows} tiket sekali proses agar server tidak timeout. Pecah CSV menjadi beberapa batch kecil.`,
+      },
+      { status: 400 },
     );
   }
 

@@ -142,19 +142,32 @@ export default function GeneratePage() {
     setLoading(true);
     setMessage("Membuat tiket HD, ZIP, PDF, dan manifest...");
     setBatch(null);
-    const response = await fetch("/api/generate/batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId, templateId, barcodeType, rows, duplicateMode: skipDuplicates ? "skip" : "block" }),
-    });
-    const data = await response.json();
-    setLoading(false);
-    if (!response.ok) {
-      setMessage(data.error ?? "Tiket belum berhasil dibuat.");
-      return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 70_000);
+    try {
+      const response = await fetch("/api/generate/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, templateId, barcodeType, rows, duplicateMode: skipDuplicates ? "skip" : "block" }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({ error: "Server tidak mengirim pesan. Kemungkinan proses terlalu lama." }));
+      if (!response.ok) {
+        setMessage(data.error ?? "Tiket belum berhasil dibuat.");
+        return;
+      }
+      setBatch({ ...data.batch, tickets: data.tickets ?? [], skippedRows: data.skippedRows ?? 0 });
+      setMessage(data.skippedRows ? `Tiket berhasil dibuat. ${data.skippedRows} data yang sama dilewati.` : "Tiket berhasil dibuat.");
+    } catch (error) {
+      setMessage(
+        error instanceof DOMException && error.name === "AbortError"
+          ? "Proses terlalu lama untuk server online. Pecah CSV menjadi batch lebih kecil, misalnya 50-80 siswa."
+          : "Koneksi generate terputus. Coba lagi dengan batch lebih kecil.",
+      );
+    } finally {
+      window.clearTimeout(timer);
+      setLoading(false);
     }
-    setBatch({ ...data.batch, tickets: data.tickets ?? [], skippedRows: data.skippedRows ?? 0 });
-    setMessage(data.skippedRows ? `Tiket berhasil dibuat. ${data.skippedRows} data yang sama dilewati.` : "Tiket berhasil dibuat.");
   }
 
   return (
