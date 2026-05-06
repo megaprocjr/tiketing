@@ -142,6 +142,7 @@ export default function GeneratePage() {
   }, [existingTickets, rows]);
 
   const hasDuplicates = duplicateInCsv.length > 0 || duplicateExisting.length > 0;
+  const hasExistingTicketsInCsv = duplicateExisting.length > 0;
   const selectedEvent = events.find((event) => event.id === eventId);
   const selectedTemplate = templates.find((template) => template.id === templateId);
   const readySteps = [
@@ -155,6 +156,12 @@ export default function GeneratePage() {
     () => eventId && templateId && rows.length > 0 && errors.length === 0 && !loading && (!hasDuplicates || skipDuplicates),
     [eventId, templateId, rows, errors, loading, hasDuplicates, skipDuplicates],
   );
+
+  useEffect(() => {
+    if (hasExistingTicketsInCsv) {
+      setSkipDuplicates(true);
+    }
+  }, [hasExistingTicketsInCsv]);
 
   useEffect(() => {
     if (!loading) return;
@@ -194,10 +201,17 @@ export default function GeneratePage() {
   async function generate() {
     setLoading(true);
     setGenerateProgress(6);
-    const chunks = chunkRowsByClass(rows);
+    const duplicateExistingKeys = new Set(duplicateExisting.map(({ row }) => rowKey(row)));
+    const rowsForGeneration = skipDuplicates ? rows.filter((row) => !duplicateExistingKeys.has(rowKey(row))) : rows;
+    const chunks = chunkRowsByClass(rowsForGeneration);
+    if (!chunks.length) {
+      setMessage("Semua data di file ini sudah punya tiket. Tidak ada sisa data yang perlu dibuat.");
+      setLoading(false);
+      return;
+    }
     setMessage(
       chunks.length > 1
-        ? `Membuat ${rows.length} tiket per kelas dalam ${chunks.length} file unduhan...`
+        ? `Membuat ${rowsForGeneration.length} tiket per kelas dalam ${chunks.length} file unduhan...`
         : "Membuat tiket HD, ZIP, PDF, dan daftar unduhan...",
     );
     setBatch(null);
@@ -355,8 +369,10 @@ export default function GeneratePage() {
                 className="mt-1 h-4 w-4 rounded border-amber-300"
               />
               <span>
-                <span className="block font-black">Lewati data yang sudah ada</span>
-                Tiket baru tetap dibuat untuk siswa lain. Data yang sama tidak akan dibuat lagi.
+                <span className="block font-black">{hasExistingTicketsInCsv ? "Lanjutkan sisa data" : "Lewati data yang sama"}</span>
+                {hasExistingTicketsInCsv
+                  ? `${duplicateExisting.length} siswa sudah punya tiket. Sistem akan membuat tiket untuk siswa lainnya saja.`
+                  : "Tiket baru tetap dibuat untuk siswa lain. Data yang sama tidak akan dibuat lagi."}
               </span>
             </label>
           )}
@@ -398,7 +414,7 @@ export default function GeneratePage() {
             </div>
           )}
           <p className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
-            Data besar akan diproses otomatis per kelas. Tiap kelas mendapat ZIP gambar, PDF, dan daftar sendiri.
+            Data besar akan diproses otomatis per kelas. Kalau sebagian sudah masuk, sistem lanjut membuat sisanya saja.
           </p>
           {message && <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">{message}</p>}
         </section>
